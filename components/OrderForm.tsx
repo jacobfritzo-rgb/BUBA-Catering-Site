@@ -305,18 +305,17 @@ export default function OrderForm() {
       {/* Event Photos */}
       <EventPhotos />
 
+      {/* Admin Link - Fixed Top Right */}
+      <a
+        href="/admin/login"
+        className="fixed top-4 right-4 text-sm font-black uppercase tracking-wide text-[#E10600] hover:text-white hover:bg-[#E10600] border-2 border-[#E10600] px-4 py-2 transition-colors z-50 bg-white"
+      >
+        ADMIN
+      </a>
+
       {/* Order Form Section */}
       <div id="order-form" className="bg-gray-50 py-16 px-4 border-t-4 border-black">
         <div className="max-w-2xl mx-auto">
-          {/* Admin Link */}
-          <div className="flex justify-end mb-4">
-            <a
-              href="/admin/login"
-              className="text-sm font-black uppercase tracking-wide text-[#E10600] hover:text-white hover:bg-[#E10600] border-2 border-[#E10600] px-4 py-2 transition-colors"
-            >
-              ADMIN
-            </a>
-          </div>
 
           {/* Form Header */}
           <div className="text-center mb-12">
