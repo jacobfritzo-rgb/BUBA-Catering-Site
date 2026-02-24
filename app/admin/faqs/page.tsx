@@ -93,7 +93,7 @@ export default function FAQManagement() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-black uppercase tracking-tight">FAQ Management</h1>
           <button
-            onClick={() => router.push("/admin/dashboard")}
+            onClick={() => router.push("/admin")}
             className="bg-black text-white font-black px-6 py-2 uppercase tracking-tight border-4 border-black hover:bg-white hover:text-black transition-colors"
           >
             Back to Dashboard

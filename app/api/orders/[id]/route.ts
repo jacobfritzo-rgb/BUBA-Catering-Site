@@ -1,20 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { OrderStatus, UpdateOrderRequest } from "@/lib/types";
-import { sendOrderPaidNotification, generateProductionSheetHTML } from "@/lib/email";
-
-// Valid status transitions
-const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ["approved", "rejected"],
-  approved: ["paid"],
-  rejected: [],
-  paid: ["completed"],
-  completed: [],
-};
-
-function isValidTransition(currentStatus: OrderStatus, newStatus: OrderStatus): boolean {
-  return VALID_TRANSITIONS[currentStatus]?.includes(newStatus) || false;
-}
+import { sendNotification, generateProductionSheetHTML } from "@/lib/email";
 
 export async function GET(
   request: NextRequest,
@@ -78,52 +65,49 @@ export async function PATCH(
 
     const currentStatus = result.rows[0].status as OrderStatus;
 
-    // Handle status update
-    if (body.status) {
-      if (!isValidTransition(currentStatus, body.status)) {
-        return NextResponse.json(
-          { error: `Invalid status transition from ${currentStatus} to ${body.status}` },
-          { status: 400 }
-        );
-      }
-
+    // Handle status update — admin can set any status (no restrictions)
+    if (body.status && body.status !== currentStatus) {
       await db.execute({
         sql: "UPDATE orders SET status = ? WHERE id = ?",
         args: [body.status, id],
       });
 
-      // If order just became paid, send kitchen notification
-      if (body.status === 'paid') {
-        // Fetch all paid orders for production sheet
-        const paidOrders = await db.execute({
-          sql: "SELECT * FROM orders WHERE status = 'paid' ORDER BY CASE WHEN fulfillment_type = 'delivery' THEN delivery_date ELSE pickup_date END",
-          args: [],
-        });
+      // Fetch full updated order for email notification
+      const orderResult = await db.execute({
+        sql: "SELECT * FROM orders WHERE id = ?",
+        args: [id],
+      });
+      const order = {
+        ...orderResult.rows[0],
+        order_data: JSON.parse(orderResult.rows[0].order_data as string),
+      };
 
-        const ordersWithData = paidOrders.rows.map(row => ({
-          ...row,
-          order_data: JSON.parse(row.order_data as string),
-        }));
+      // Map status to notification trigger name
+      const triggerMap: Partial<Record<OrderStatus, string>> = {
+        approved: 'order_approved',
+        rejected: 'order_rejected',
+        paid: 'order_paid',
+        completed: 'order_completed',
+      };
 
-        const productionHTML = generateProductionSheetHTML(ordersWithData as any[]);
-
-        // Get this specific order for the email
-        const thisOrderResult = await db.execute({
-          sql: "SELECT * FROM orders WHERE id = ?",
-          args: [id],
-        });
-
-        if (thisOrderResult.rows.length > 0) {
-          const thisOrder = {
-            ...thisOrderResult.rows[0],
-            order_data: JSON.parse(thisOrderResult.rows[0].order_data as string),
-          };
-
-          // Send notification (don't await - background)
-          sendOrderPaidNotification(thisOrder as any, productionHTML).catch(err =>
-            console.error('Kitchen notification failed:', err)
-          );
+      const trigger = triggerMap[body.status];
+      if (trigger) {
+        let productionSheetHTML: string | undefined;
+        if (body.status === 'paid') {
+          const paidOrders = await db.execute({
+            sql: "SELECT * FROM orders WHERE status = 'paid' ORDER BY CASE WHEN fulfillment_type = 'delivery' THEN delivery_date ELSE pickup_date END",
+            args: [],
+          });
+          const ordersWithData = paidOrders.rows.map(row => ({
+            ...row,
+            order_data: JSON.parse(row.order_data as string),
+          }));
+          productionSheetHTML = generateProductionSheetHTML(ordersWithData as any[]);
         }
+
+        sendNotification(trigger, order as any, productionSheetHTML).catch(err =>
+          console.error(`Notification failed for ${trigger}:`, err)
+        );
       }
     }
 

@@ -77,6 +77,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
     setTimeout(() => setMessage(""), 2000);
   };
 
+  const ALL_STATUSES = ["pending", "approved", "rejected", "paid", "completed"];
   const isPaid = order.status === "paid";
 
   return (
@@ -157,44 +158,22 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
 
       {/* Actions */}
       <div className="flex gap-3 items-center flex-wrap">
-        {order.status === "pending" && (
-          <>
-            <button
-              onClick={() => updateStatus("approved")}
-              disabled={isUpdating}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
-            >
-              Approve
-            </button>
-            <button
-              onClick={() => updateStatus("rejected")}
-              disabled={isUpdating}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
-            >
-              Reject
-            </button>
-          </>
-        )}
-
-        {order.status === "approved" && (
-          <button
-            onClick={() => updateStatus("paid")}
+        {/* Status selector — any status can be set */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold text-gray-700">Set status:</label>
+          <select
+            value={order.status}
+            onChange={(e) => updateStatus(e.target.value)}
             disabled={isUpdating}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
+            className="border border-gray-300 rounded px-3 py-2 text-sm font-medium bg-white disabled:opacity-50 cursor-pointer"
           >
-            Mark as Paid
-          </button>
-        )}
-
-        {order.status === "paid" && (
-          <button
-            onClick={() => updateStatus("completed")}
-            disabled={isUpdating}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
-          >
-            Mark Complete
-          </button>
-        )}
+            {ALL_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           onClick={copyToClipboard}

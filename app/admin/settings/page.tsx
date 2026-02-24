@@ -1,83 +1,306 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+interface EmailSetting {
+  trigger_name: string;
+  enabled: number;
+  recipients: string;
+}
+
+interface EmailTemplate {
+  trigger_name: string;
+  label: string;
+  subject: string;
+  body_html: string;
+}
+
+const TRIGGER_LABELS: Record<string, string> = {
+  new_order: "New Order Submitted",
+  order_approved: "Order Approved",
+  order_rejected: "Order Rejected",
+  order_paid: "Order Paid (Kitchen)",
+  order_completed: "Order Completed",
+};
+
+const AVAILABLE_VARIABLES = [
+  { name: "{{order_id}}", desc: "Order number" },
+  { name: "{{customer_name}}", desc: "Customer full name" },
+  { name: "{{customer_email}}", desc: "Customer email" },
+  { name: "{{customer_phone}}", desc: "Customer phone" },
+  { name: "{{fulfillment_type}}", desc: "Delivery or Pickup" },
+  { name: "{{fulfillment_date}}", desc: "Date of fulfillment" },
+  { name: "{{fulfillment_time}}", desc: "Time window" },
+  { name: "{{delivery_address_line}}", desc: "Address line (delivery only)" },
+  { name: "{{total}}", desc: "Order total (e.g. $225.00)" },
+  { name: "{{items_html}}", desc: "Box & flavor breakdown (HTML)" },
+  { name: "{{admin_url}}", desc: "Link to admin dashboard" },
+  { name: "{{production_sheet}}", desc: "Full kitchen production sheet (order_paid only)" },
+];
+
 export default function Settings() {
+  const router = useRouter();
+  const [settings, setSettings] = useState<EmailSetting[]>([]);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [activeTemplate, setActiveTemplate] = useState<string>("new_order");
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState("");
+  const [templateMsg, setTemplateMsg] = useState("");
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testMsg, setTestMsg] = useState("");
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/email-settings").then(r => r.json()),
+      fetch("/api/email-templates").then(r => r.json()),
+    ]).then(([s, t]) => {
+      setSettings(s);
+      setTemplates(t);
+    });
+  }, []);
+
+  const currentTemplate = templates.find(t => t.trigger_name === activeTemplate);
+
+  const updateSetting = (trigger: string, field: "enabled" | "recipients", value: string | number) => {
+    setSettings(prev => prev.map(s =>
+      s.trigger_name === trigger ? { ...s, [field]: value } : s
+    ));
+  };
+
+  const updateTemplate = (field: "subject" | "body_html", value: string) => {
+    setTemplates(prev => prev.map(t =>
+      t.trigger_name === activeTemplate ? { ...t, [field]: value } : t
+    ));
+  };
+
+  const saveSettings = async () => {
+    setIsSavingSettings(true);
+    setSettingsMsg("");
+    try {
+      const res = await fetch("/api/email-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      setSettingsMsg(res.ok ? "Settings saved!" : "Failed to save settings.");
+    } catch {
+      setSettingsMsg("Error saving settings.");
+    } finally {
+      setIsSavingSettings(false);
+      setTimeout(() => setSettingsMsg(""), 3000);
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (!currentTemplate) return;
+    setIsSavingTemplate(true);
+    setTemplateMsg("");
+    try {
+      const res = await fetch("/api/email-templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trigger_name: currentTemplate.trigger_name,
+          subject: currentTemplate.subject,
+          body_html: currentTemplate.body_html,
+        }),
+      });
+      setTemplateMsg(res.ok ? "Template saved!" : "Failed to save template.");
+    } catch {
+      setTemplateMsg("Error saving template.");
+    } finally {
+      setIsSavingTemplate(false);
+      setTimeout(() => setTemplateMsg(""), 3000);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!testEmailAddress) {
+      setTestMsg("Enter a test email address.");
+      return;
+    }
+    setIsSendingTest(true);
+    setTestMsg("");
+    try {
+      const res = await fetch("/api/email-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testEmailAddress, trigger_name: activeTemplate }),
+      });
+      const data = await res.json();
+      setTestMsg(res.ok ? `Test email sent to ${testEmailAddress}!` : (data.error || "Failed to send test email."));
+    } catch {
+      setTestMsg("Error sending test email.");
+    } finally {
+      setIsSendingTest(false);
+      setTimeout(() => setTestMsg(""), 5000);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
+    <div className="min-h-screen bg-white p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-black uppercase tracking-tight">Email Settings</h1>
           <button
-            onClick={() => window.history.back()}
-            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+            onClick={() => router.push("/admin")}
+            className="bg-black text-white font-black px-6 py-2 uppercase tracking-tight border-4 border-black hover:bg-white hover:text-black transition-colors"
           >
-            ← Back to Admin
+            Back to Dashboard
           </button>
         </div>
 
-        <div className="bg-white shadow-lg rounded-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Email Notification Settings</h1>
+        {/* SECTION 1: Notification Recipients */}
+        <div className="border-4 border-black p-6 mb-8">
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Notification Recipients</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Configure who receives emails for each event. Use comma-separated addresses for multiple recipients.
+          </p>
+          <div className="space-y-4">
+            {settings.map((s) => (
+              <div key={s.trigger_name} className="border-2 border-gray-200 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <input
+                    type="checkbox"
+                    id={`toggle-${s.trigger_name}`}
+                    checked={s.enabled === 1}
+                    onChange={(e) => updateSetting(s.trigger_name, "enabled", e.target.checked ? 1 : 0)}
+                    className="w-5 h-5 cursor-pointer"
+                  />
+                  <label htmlFor={`toggle-${s.trigger_name}`} className="font-black uppercase tracking-wide text-sm cursor-pointer">
+                    {TRIGGER_LABELS[s.trigger_name] || s.trigger_name}
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={s.recipients}
+                  onChange={(e) => updateSetting(s.trigger_name, "recipients", e.target.value)}
+                  placeholder="email@example.com, another@example.com"
+                  disabled={s.enabled === 0}
+                  className="w-full px-3 py-2 border-2 border-black text-sm font-medium disabled:opacity-40 disabled:bg-gray-100"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 mt-6">
+            <button
+              onClick={saveSettings}
+              disabled={isSavingSettings}
+              className="bg-[#E10600] text-white font-black px-6 py-3 uppercase tracking-tight border-4 border-[#E10600] hover:bg-black hover:border-black transition-colors disabled:opacity-50"
+            >
+              {isSavingSettings ? "Saving..." : "Save Recipients"}
+            </button>
+            {settingsMsg && (
+              <span className={`text-sm font-black ${settingsMsg.includes("saved") ? "text-green-600" : "text-red-600"}`}>
+                {settingsMsg}
+              </span>
+            )}
+          </div>
+        </div>
 
-          <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded mb-6">
-            <h2 className="font-bold text-blue-900 mb-2">How to Configure Email Notifications:</h2>
-            <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800">
-              <li>Sign up for a free account at <a href="https://resend.com" target="_blank" rel="noopener" className="underline font-bold">resend.com</a></li>
-              <li>Get your API key from the Resend dashboard</li>
-              <li>Add the following to your <code className="bg-white px-2 py-1 rounded">.env.local</code> file:</li>
-            </ol>
+        {/* SECTION 2: Email Templates */}
+        <div className="border-4 border-black p-6 mb-8">
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Email Templates</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Customize the subject and body for each notification. HTML is supported.
+          </p>
+
+          <div className="flex gap-2 flex-wrap mb-6">
+            {templates.map((t) => (
+              <button
+                key={t.trigger_name}
+                onClick={() => setActiveTemplate(t.trigger_name)}
+                className={`px-4 py-2 text-sm font-black uppercase tracking-tight border-2 transition-colors ${
+                  activeTemplate === t.trigger_name
+                    ? "bg-[#E10600] text-white border-[#E10600]"
+                    : "bg-white text-black border-black hover:bg-gray-100"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
 
-          <div className="bg-gray-900 text-green-400 p-4 rounded font-mono text-sm mb-6">
-            <div className="mb-2"># Email Configuration</div>
-            <div>RESEND_API_KEY=re_your_api_key_here</div>
-            <div>RESEND_DOMAIN=yourdomain.com</div>
-            <div className="mt-4"># Who gets notified when new order submitted</div>
-            <div>ADMIN_EMAIL=admin@yourbusiness.com</div>
-            <div className="mt-4"># Who gets notified when order is paid (kitchen staff)</div>
-            <div>KITCHEN_EMAIL=kitchen@yourbusiness.com</div>
-            <div className="mt-4"># Optional: Your site URL for email links</div>
-            <div>NEXT_PUBLIC_BASE_URL=https://yourdomain.com</div>
-          </div>
-
-          <div className="border-t-2 border-gray-200 pt-6">
-            <h3 className="text-xl font-bold mb-4">Email Notification Flow:</h3>
-
+          {currentTemplate && (
             <div className="space-y-4">
-              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4">
-                <h4 className="font-bold text-yellow-900">1. Order Submitted (Pending)</h4>
-                <p className="text-sm text-yellow-800 mt-1">
-                  → Notification sent to <code className="bg-white px-1">ADMIN_EMAIL</code>
-                </p>
-                <p className="text-xs text-yellow-700 mt-2">
-                  Contains: Customer info, order details, link to admin dashboard
-                </p>
+              <div>
+                <label className="block text-sm font-black uppercase tracking-wide mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={currentTemplate.subject}
+                  onChange={(e) => updateTemplate("subject", e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-black text-sm font-medium"
+                />
               </div>
+              <div>
+                <label className="block text-sm font-black uppercase tracking-wide mb-1">Body (HTML)</label>
+                <textarea
+                  value={currentTemplate.body_html}
+                  onChange={(e) => updateTemplate("body_html", e.target.value)}
+                  rows={14}
+                  className="w-full px-3 py-2 border-2 border-black text-sm font-mono"
+                />
+              </div>
+            </div>
+          )}
 
-              <div className="bg-green-50 border-l-4 border-green-500 p-4">
-                <h4 className="font-bold text-green-900">2. Order Marked as Paid</h4>
-                <p className="text-sm text-green-800 mt-1">
-                  → Notification sent to <code className="bg-white px-1">KITCHEN_EMAIL</code>
-                </p>
-                <p className="text-xs text-green-700 mt-2">
-                  Contains: Production sheet with ALL paid orders formatted for printing
-                </p>
-              </div>
+          <div className="mt-4 p-4 bg-gray-50 border-2 border-gray-200">
+            <p className="text-xs font-black uppercase tracking-wide text-gray-700 mb-3">Available Template Variables</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+              {AVAILABLE_VARIABLES.map((v) => (
+                <div key={v.name} className="text-xs flex items-baseline gap-1">
+                  <code className="bg-white border border-gray-300 px-1 py-0.5 text-[#E10600] font-mono shrink-0">{v.name}</code>
+                  <span className="text-gray-500">— {v.desc}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="bg-gray-50 border-2 border-gray-300 p-4 rounded mt-6">
-            <h4 className="font-bold text-gray-900 mb-2">💡 Pro Tips:</h4>
-            <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-              <li>Use the same email for ADMIN_EMAIL and KITCHEN_EMAIL if you're managing both</li>
-              <li>Or use different emails: manager for approvals, kitchen staff for production</li>
-              <li>RESEND_DOMAIN can be "resend.dev" for testing (Resend's free domain)</li>
-              <li>For production, verify your own domain in Resend for better deliverability</li>
-            </ul>
+          <div className="flex items-center gap-4 mt-6">
+            <button
+              onClick={saveTemplate}
+              disabled={isSavingTemplate}
+              className="bg-[#E10600] text-white font-black px-6 py-3 uppercase tracking-tight border-4 border-[#E10600] hover:bg-black hover:border-black transition-colors disabled:opacity-50"
+            >
+              {isSavingTemplate ? "Saving..." : "Save Template"}
+            </button>
+            {templateMsg && (
+              <span className={`text-sm font-black ${templateMsg.includes("saved") ? "text-green-600" : "text-red-600"}`}>
+                {templateMsg}
+              </span>
+            )}
           </div>
+        </div>
 
-          <div className="mt-6 p-4 bg-red-50 border-2 border-red-200 rounded">
-            <h4 className="font-bold text-red-900 mb-2">⚠️ Important:</h4>
-            <p className="text-sm text-red-800">
-              After updating your <code className="bg-white px-1">.env.local</code> file, restart your development server for changes to take effect.
-            </p>
+        {/* SECTION 3: Test Email */}
+        <div className="border-4 border-black p-6">
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Send Test Email</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Send a test of the <strong>{TRIGGER_LABELS[activeTemplate]}</strong> template with sample data to verify formatting.
+          </p>
+          <div className="flex gap-3 items-center flex-wrap">
+            <input
+              type="email"
+              value={testEmailAddress}
+              onChange={(e) => setTestEmailAddress(e.target.value)}
+              placeholder="your@email.com"
+              className="px-3 py-2 border-2 border-black text-sm font-medium w-64"
+            />
+            <button
+              onClick={sendTestEmail}
+              disabled={isSendingTest}
+              className="bg-black text-white font-black px-6 py-2 uppercase tracking-tight border-4 border-black hover:bg-[#E10600] hover:border-[#E10600] transition-colors disabled:opacity-50"
+            >
+              {isSendingTest ? "Sending..." : "Send Test"}
+            </button>
+            {testMsg && (
+              <span className={`text-sm font-black ${testMsg.includes("sent") ? "text-green-600" : "text-red-600"}`}>
+                {testMsg}
+              </span>
+            )}
           </div>
         </div>
       </div>

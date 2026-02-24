@@ -1,105 +1,130 @@
 import { Resend } from 'resend';
 import { Order } from './types';
 import { formatPrice, getFulfillmentDate, getFulfillmentTimeDisplay } from './utils';
+import { db } from './db';
 
-// Only initialize if API key is available (optional for build-time)
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-export async function sendNewOrderNotification(order: Order) {
-  if (!process.env.ADMIN_EMAIL || !process.env.RESEND_API_KEY || !resend) {
-    console.log('Email not configured - skipping notification');
+// Low-level send function
+async function sendEmail(to: string[], subject: string, html: string) {
+  if (!resend) {
+    console.log('Resend not configured - skipping email');
     return;
   }
+  await resend.emails.send({
+    from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
+    to,
+    subject,
+    html,
+  });
+}
 
+// Build a variables map from an order
+function buildVariables(order: Order, productionSheetHTML?: string): Record<string, string> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://buba-catering-site-production.up.railway.app';
   const fulfillmentDate = getFulfillmentDate(order);
   const fulfillmentTime = getFulfillmentTimeDisplay(order);
 
+  const itemsHtml = order.order_data.items.map(item => `
+    <p><strong>${item.type === 'party_box' ? 'Party Box' : 'Big Box'}</strong></p>
+    <ul>${item.flavors.map(f => `<li>${f.name}: ${f.quantity} pcs</li>`).join('')}</ul>
+  `).join('');
+
+  const addonsHtml = order.order_data.addons && order.order_data.addons.length > 0
+    ? `<h3>Add-ons:</h3><ul>${order.order_data.addons.map(a => `<li>${a.name} x${a.quantity}</li>`).join('')}</ul>`
+    : '';
+
+  return {
+    order_id: String(order.id),
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    customer_phone: order.customer_phone,
+    fulfillment_type: order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup',
+    fulfillment_date: fulfillmentDate,
+    fulfillment_time: fulfillmentTime,
+    delivery_address_line: order.delivery_address
+      ? `<p><strong>Address:</strong> ${order.delivery_address}</p>`
+      : '',
+    total: `$${(order.total_price / 100).toFixed(2)}`,
+    items_html: itemsHtml + addonsHtml,
+    admin_url: `${baseUrl}/admin`,
+    production_sheet: productionSheetHTML || '',
+  };
+}
+
+// Substitute {{variable}} placeholders in a template string
+function substitute(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '');
+}
+
+// Core: send a notification for a given trigger
+export async function sendNotification(
+  triggerName: string,
+  order: Order,
+  productionSheetHTML?: string
+) {
   try {
-    await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
-      to: process.env.ADMIN_EMAIL,
-      subject: `New Catering Request #${order.id} - ${order.customer_name}`,
-      html: `
-        <h2>New Catering Order Request</h2>
-        <p><strong>Order ID:</strong> #${order.id}</p>
-        <p><strong>Customer:</strong> ${order.customer_name}</p>
-        <p><strong>Email:</strong> ${order.customer_email}</p>
-        <p><strong>Phone:</strong> ${order.customer_phone}</p>
-        <p><strong>Type:</strong> ${order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup'}</p>
-        <p><strong>Date:</strong> ${fulfillmentDate}</p>
-        <p><strong>Time:</strong> ${fulfillmentTime}</p>
-        ${order.fulfillment_type === 'delivery' ? `<p><strong>Address:</strong> ${order.delivery_address}</p>` : ''}
-        <p><strong>Total:</strong> $${formatPrice(order.total_price)}</p>
+    // Fetch settings and template in parallel
+    const [settingsResult, templateResult] = await Promise.all([
+      db.execute({
+        sql: "SELECT * FROM email_settings WHERE trigger_name = ?",
+        args: [triggerName],
+      }),
+      db.execute({
+        sql: "SELECT * FROM email_templates WHERE trigger_name = ?",
+        args: [triggerName],
+      }),
+    ]);
 
-        <h3>Order Details:</h3>
-        ${order.order_data.items.map(item => `
-          <p><strong>${item.type === 'party_box' ? 'Party Box' : 'Big Box'}</strong></p>
-          <ul>
-            ${item.flavors.map(f => `<li>${f.name}: ${f.quantity} pcs</li>`).join('')}
-          </ul>
-        `).join('')}
+    if (settingsResult.rows.length === 0 || templateResult.rows.length === 0) {
+      console.log(`No settings/template found for trigger: ${triggerName}`);
+      return;
+    }
 
-        ${order.order_data.addons && order.order_data.addons.length > 0 ? `
-          <h3>Add-ons:</h3>
-          <ul>
-            ${order.order_data.addons.map(a => `<li>${a.name} x${a.quantity}</li>`).join('')}
-          </ul>
-        ` : ''}
+    const settings = settingsResult.rows[0];
+    if (!settings.enabled) {
+      console.log(`Notification disabled for trigger: ${triggerName}`);
+      return;
+    }
 
-        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/admin">View in Admin Dashboard</a></p>
-      `,
-    });
-    console.log(`New order notification sent for order #${order.id}`);
+    const recipientsStr = settings.recipients as string;
+    if (!recipientsStr || !recipientsStr.trim()) {
+      console.log(`No recipients configured for trigger: ${triggerName}`);
+      return;
+    }
+
+    const recipients = recipientsStr.split(',').map(r => r.trim()).filter(Boolean);
+    if (recipients.length === 0) return;
+
+    const template = templateResult.rows[0];
+    const vars = buildVariables(order, productionSheetHTML);
+    const subject = substitute(template.subject as string, vars);
+    const html = substitute(template.body_html as string, vars);
+
+    await sendEmail(recipients, subject, html);
+    console.log(`Notification sent for trigger: ${triggerName}, order: #${order.id}`);
   } catch (error) {
-    console.error('Failed to send new order notification:', error);
+    console.error(`Failed to send notification for trigger ${triggerName}:`, error);
+    throw error;
   }
+}
+
+// Convenience wrappers kept for backward compat / external callers
+export async function sendNewOrderNotification(order: Order) {
+  return sendNotification('new_order', order);
 }
 
 export async function sendOrderPaidNotification(order: Order, productionSheetHTML: string) {
-  if (!process.env.KITCHEN_EMAIL || !process.env.RESEND_API_KEY || !resend) {
-    console.log('Kitchen email not configured - skipping notification');
-    return;
-  }
-
-  const fulfillmentDate = getFulfillmentDate(order);
-
-  try {
-    await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
-      to: process.env.KITCHEN_EMAIL,
-      subject: `✓ PAID Order #${order.id} - ${fulfillmentDate}`,
-      html: `
-        <h2>New Confirmed Order for Production</h2>
-        <p><strong>Order ID:</strong> #${order.id}</p>
-        <p><strong>Customer:</strong> ${order.customer_name}</p>
-        <p><strong>Fulfillment Date:</strong> ${fulfillmentDate}</p>
-        <p><strong>${order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup'}:</strong> ${getFulfillmentTimeDisplay(order)}</p>
-
-        <hr/>
-        <h3>PRINT THIS SECTION FOR KITCHEN:</h3>
-        ${productionSheetHTML}
-
-        <hr/>
-        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/admin">View Full Production Schedule</a></p>
-      `,
-    });
-    console.log(`Order paid notification sent for order #${order.id}`);
-  } catch (error) {
-    console.error('Failed to send order paid notification:', error);
-  }
+  return sendNotification('order_paid', order, productionSheetHTML);
 }
 
 export function generateProductionSheetHTML(orders: Order[]): string {
-  // Group by date
   const ordersByDate: { [date: string]: Order[] } = {};
-
   orders.forEach(order => {
     const date = getFulfillmentDate(order);
-    if (!ordersByDate[date]) {
-      ordersByDate[date] = [];
-    }
+    if (!ordersByDate[date]) ordersByDate[date] = [];
     ordersByDate[date].push(order);
   });
 
@@ -114,7 +139,6 @@ export function generateProductionSheetHTML(orders: Order[]): string {
     html += `<div style="page-break-after: always; margin-bottom: 40px;">`;
     html += `<h2 style="background: black; color: white; padding: 10px;">${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h2>`;
 
-    // Calculate totals for the day
     const flavorTotals: { [name: string]: number } = {};
     const addonTotals: { [name: string]: number } = {};
     let partyBoxes = 0;
@@ -124,12 +148,10 @@ export function generateProductionSheetHTML(orders: Order[]): string {
       order.order_data.items.forEach(item => {
         if (item.type === 'party_box') partyBoxes++;
         else bigBoxes++;
-
         item.flavors.forEach(flavor => {
           flavorTotals[flavor.name] = (flavorTotals[flavor.name] || 0) + flavor.quantity;
         });
       });
-
       order.order_data.addons?.forEach(addon => {
         addonTotals[addon.name] = (addonTotals[addon.name] || 0) + addon.quantity;
       });
@@ -166,7 +188,7 @@ export function generateProductionSheetHTML(orders: Order[]): string {
       html += `<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; background: #ffe6e6; padding: 10px;">`;
       html += `<div><strong>Order #${order.id}</strong></div>`;
       html += `<div><strong>${order.customer_name}</strong></div>`;
-      html += `<div>${order.fulfillment_type === 'delivery' ? '📦 DELIVERY' : '🏪 PICKUP'}: ${time}</div>`;
+      html += `<div>${order.fulfillment_type === 'delivery' ? 'DELIVERY' : 'PICKUP'}: ${time}</div>`;
       html += `<div>${order.customer_phone}</div>`;
       html += `</div>`;
 
@@ -176,7 +198,7 @@ export function generateProductionSheetHTML(orders: Order[]): string {
 
       order.order_data.items.forEach(item => {
         html += `<div style="margin-left: 15px; border-left: 4px solid #007bff; padding-left: 10px; margin-bottom: 10px;">`;
-        html += `<strong>${item.type === 'party_box' ? '🎉 PARTY BOX' : '📦 BIG BOX'}</strong><br/>`;
+        html += `<strong>${item.type === 'party_box' ? 'PARTY BOX' : 'BIG BOX'}</strong><br/>`;
         item.flavors.forEach(f => {
           html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`;
         });
@@ -191,7 +213,6 @@ export function generateProductionSheetHTML(orders: Order[]): string {
         });
         html += `</div>`;
       }
-
       html += `</div>`;
     });
 
