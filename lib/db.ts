@@ -99,9 +99,9 @@ export async function initDb() {
 
     // Seed email_settings if empty
     const settingsResult = await db.execute("SELECT COUNT(*) as count FROM email_settings");
+    const adminEmail = process.env.ADMIN_EMAIL || '';
+    const kitchenEmail = process.env.KITCHEN_EMAIL || '';
     if ((settingsResult.rows[0].count as number) === 0) {
-      const adminEmail = process.env.ADMIN_EMAIL || '';
-      const kitchenEmail = process.env.KITCHEN_EMAIL || '';
       const triggers = [
         { trigger_name: 'new_order', enabled: 1, recipients: adminEmail },
         { trigger_name: 'order_approved', enabled: 1, recipients: adminEmail },
@@ -113,6 +113,23 @@ export async function initDb() {
         await db.execute({
           sql: "INSERT OR IGNORE INTO email_settings (trigger_name, enabled, recipients) VALUES (?, ?, ?)",
           args: [t.trigger_name, t.enabled, t.recipients],
+        });
+      }
+    } else if (adminEmail || kitchenEmail) {
+      // Update any rows that were seeded with empty recipients (handles first-deploy race condition)
+      const adminTriggers = ['new_order', 'order_approved', 'order_rejected', 'order_completed'];
+      for (const trigger of adminTriggers) {
+        if (adminEmail) {
+          await db.execute({
+            sql: "UPDATE email_settings SET recipients = ? WHERE trigger_name = ? AND (recipients = '' OR recipients IS NULL)",
+            args: [adminEmail, trigger],
+          });
+        }
+      }
+      if (kitchenEmail) {
+        await db.execute({
+          sql: "UPDATE email_settings SET recipients = ? WHERE trigger_name = 'order_paid' AND (recipients = '' OR recipients IS NULL)",
+          args: [kitchenEmail],
         });
       }
     }

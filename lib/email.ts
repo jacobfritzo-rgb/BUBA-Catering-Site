@@ -89,7 +89,18 @@ export async function sendNotification(
       return;
     }
 
-    const recipientsStr = settings.recipients as string;
+    let recipientsStr = settings.recipients as string;
+
+    // Fall back to env vars if DB recipients are empty (handles first-deploy seeding race)
+    if (!recipientsStr || !recipientsStr.trim()) {
+      if (triggerName === 'order_paid') {
+        recipientsStr = process.env.KITCHEN_EMAIL || process.env.ADMIN_EMAIL || '';
+      } else {
+        recipientsStr = process.env.ADMIN_EMAIL || '';
+      }
+      console.log(`DB recipients empty for ${triggerName}, falling back to env var: ${recipientsStr || '(none)'}`);
+    }
+
     if (!recipientsStr || !recipientsStr.trim()) {
       console.log(`No recipients configured for trigger: ${triggerName}`);
       return;
