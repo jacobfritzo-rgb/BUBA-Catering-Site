@@ -18,7 +18,7 @@ export async function sendNewOrderNotification(order: Order) {
 
   try {
     await resend.emails.send({
-      from: 'BUBA Catering <orders@' + (process.env.RESEND_DOMAIN || 'resend.dev') + '>',
+      from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
       to: process.env.ADMIN_EMAIL,
       subject: `New Catering Request #${order.id} - ${order.customer_name}`,
       html: `
@@ -67,7 +67,7 @@ export async function sendOrderPaidNotification(order: Order, productionSheetHTM
 
   try {
     await resend.emails.send({
-      from: 'BUBA Catering <orders@' + (process.env.RESEND_DOMAIN || 'resend.dev') + '>',
+      from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
       to: process.env.KITCHEN_EMAIL,
       subject: `✓ PAID Order #${order.id} - ${fulfillmentDate}`,
       html: `
