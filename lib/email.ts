@@ -7,18 +7,32 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-// Low-level send function
+const PRIMARY_FROM = process.env.RESEND_FROM_EMAIL || 'BUBA Catering <orders@send.bubabureka.com>';
+const FALLBACK_FROM = 'BUBA Catering <onboarding@resend.dev>';
+
+// Low-level send function — falls back to onboarding@resend.dev if custom domain is not yet verified
 async function sendEmail(to: string[], subject: string, html: string) {
   if (!resend) {
-    console.log('Resend not configured - skipping email');
+    console.error('RESEND_API_KEY not set — email skipped');
     return;
   }
-  await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <orders@send.bubabureka.com>',
-    to,
-    subject,
-    html,
-  });
+  try {
+    const result = await resend.emails.send({ from: PRIMARY_FROM, to, subject, html });
+    console.log(`Email sent from ${PRIMARY_FROM} to ${to.join(', ')} — id: ${(result as any)?.data?.id || 'ok'}`);
+  } catch (primaryErr: unknown) {
+    const msg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+    console.error(`Email failed from ${PRIMARY_FROM}: ${msg}`);
+    if (PRIMARY_FROM === FALLBACK_FROM) throw primaryErr; // avoid infinite loop
+    console.log(`Retrying with fallback from: ${FALLBACK_FROM}`);
+    try {
+      const result = await resend.emails.send({ from: FALLBACK_FROM, to, subject, html });
+      console.log(`Fallback email sent to ${to.join(', ')} — id: ${(result as any)?.data?.id || 'ok'}`);
+    } catch (fallbackErr: unknown) {
+      const msg2 = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+      console.error(`Fallback email also failed: ${msg2}`);
+      throw fallbackErr;
+    }
+  }
 }
 
 // Build a variables map from an order

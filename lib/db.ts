@@ -232,6 +232,10 @@ export async function initDb() {
     // NOTE: SQLite ALTER TABLE ADD COLUMN DEFAULT '' doesn't physically write '' to existing rows,
     // so we can't rely on WHERE customer_subject = '' to match. Instead, read and check in JS.
     const customerTemplateDefaults: Record<string, { subject: string; body: string }> = {
+      'new_order': {
+        subject: 'We received your BUBA Catering request #{{order_id}}!',
+        body: `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Order summary:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p>{{items_html}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`,
+      },
       'order_approved': {
         subject: 'Your BUBA Catering order #{{order_id}} is confirmed!',
         body: `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p><p>Thank you for choosing BUBA Catering!</p>`,
