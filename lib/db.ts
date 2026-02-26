@@ -229,23 +229,35 @@ export async function initDb() {
     }
 
     // Seed customer email templates for approved/rejected if not yet populated
-    const adminUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://buba-catering-site-production.up.railway.app';
-    await db.execute({
-      sql: `UPDATE email_templates SET customer_subject = ?, customer_body_html = ?
-            WHERE trigger_name = 'order_approved' AND (customer_subject = '' OR customer_subject IS NULL)`,
-      args: [
-        'Your BUBA Catering order #{{order_id}} is confirmed!',
-        `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p><p>Thank you for choosing BUBA Catering!</p>`,
-      ],
-    });
-    await db.execute({
-      sql: `UPDATE email_templates SET customer_subject = ?, customer_body_html = ?
-            WHERE trigger_name = 'order_rejected' AND (customer_subject = '' OR customer_subject IS NULL)`,
-      args: [
-        'Regarding your BUBA Catering order #{{order_id}}',
-        `<p>Hi {{customer_name}},</p><p>Thank you for your interest in BUBA Catering. Unfortunately, we're unable to fulfill your order at this time.</p><p>{{rejection_reason}}</p><p>We hope to serve you in the future. Please don't hesitate to reach out with any questions.</p><p>— The BUBA Team</p>`,
-      ],
-    });
+    // NOTE: SQLite ALTER TABLE ADD COLUMN DEFAULT '' doesn't physically write '' to existing rows,
+    // so we can't rely on WHERE customer_subject = '' to match. Instead, read and check in JS.
+    const customerTemplateDefaults: Record<string, { subject: string; body: string }> = {
+      'order_approved': {
+        subject: 'Your BUBA Catering order #{{order_id}} is confirmed!',
+        body: `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p><p>Thank you for choosing BUBA Catering!</p>`,
+      },
+      'order_rejected': {
+        subject: 'Regarding your BUBA Catering order #{{order_id}}',
+        body: `<p>Hi {{customer_name}},</p><p>Thank you for your interest in BUBA Catering. Unfortunately, we're unable to fulfill your order at this time.</p><p>{{rejection_reason}}</p><p>We hope to serve you in the future. Please don't hesitate to reach out with any questions.</p><p>— The BUBA Team</p>`,
+      },
+    };
+    for (const [trigger, defaults] of Object.entries(customerTemplateDefaults)) {
+      const existing = await db.execute({
+        sql: "SELECT customer_subject FROM email_templates WHERE trigger_name = ?",
+        args: [trigger],
+      });
+      if (existing.rows.length > 0) {
+        const currentVal = existing.rows[0].customer_subject;
+        // Use JS-level check — handles null, undefined, '', and SQLite virtual defaults
+        if (!currentVal || String(currentVal).trim() === '') {
+          await db.execute({
+            sql: "UPDATE email_templates SET customer_subject = ?, customer_body_html = ? WHERE trigger_name = ?",
+            args: [defaults.subject, defaults.body, trigger],
+          });
+          console.log(`Seeded customer email template for: ${trigger}`);
+        }
+      }
+    }
 
     isInitialized = true;
   } catch (error) {

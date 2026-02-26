@@ -115,17 +115,28 @@ export async function sendNotification(
     const subject = substitute(template.subject as string, vars);
     const html = substitute(template.body_html as string, vars);
 
-    await sendEmail(recipients, subject, html);
-    console.log(`Notification sent for trigger: ${triggerName}, order: #${order.id}`);
+    // Send admin/internal notification (failure here must NOT block customer email)
+    try {
+      await sendEmail(recipients, subject, html);
+      console.log(`Admin notification sent for trigger: ${triggerName}, order: #${order.id}`);
+    } catch (adminErr) {
+      console.error(`Admin email failed for trigger ${triggerName}:`, adminErr);
+      // Don't re-throw — still attempt customer email below
+    }
 
     // Send customer-facing email if template has customer fields configured
-    const customerSubject = (template.customer_subject as string || '').trim();
-    const customerBodyHtml = (template.customer_body_html as string || '').trim();
+    const customerSubject = String(template.customer_subject ?? '').trim();
+    const customerBodyHtml = String(template.customer_body_html ?? '').trim();
+    console.log(`Customer email check for ${triggerName}: subject="${customerSubject ? '[set]' : '[empty]'}", to="${order.customer_email}"`);
     if (customerSubject && customerBodyHtml && order.customer_email) {
-      const customerSubjectFinal = substitute(customerSubject, vars);
-      const customerHtmlFinal = substitute(customerBodyHtml, vars);
-      await sendEmail([order.customer_email], customerSubjectFinal, customerHtmlFinal);
-      console.log(`Customer email sent for trigger: ${triggerName}, to: ${order.customer_email}`);
+      try {
+        const customerSubjectFinal = substitute(customerSubject, vars);
+        const customerHtmlFinal = substitute(customerBodyHtml, vars);
+        await sendEmail([order.customer_email], customerSubjectFinal, customerHtmlFinal);
+        console.log(`Customer email sent for trigger: ${triggerName}, to: ${order.customer_email}`);
+      } catch (customerErr) {
+        console.error(`Customer email failed for trigger ${triggerName}:`, customerErr);
+      }
     }
   } catch (error) {
     console.error(`Failed to send notification for trigger ${triggerName}:`, error);
