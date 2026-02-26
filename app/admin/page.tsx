@@ -6,6 +6,7 @@ import OrderList from "@/components/admin/OrderList";
 import MenuManager from "@/components/admin/MenuManager";
 import CustomerList from "@/components/admin/CustomerList";
 import ProductionView from "@/components/admin/ProductionView";
+import PhotoManager from "@/components/admin/PhotoManager";
 import { Order, Flavor } from "@/lib/types";
 
 interface Customer {
@@ -29,11 +30,18 @@ interface MenuItem {
   sort_order: number;
 }
 
+interface UploadedImage {
+  key: string;
+  content_type: string;
+  updated_at: string;
+}
+
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"orders" | "production" | "flavors" | "customers">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "production" | "flavors" | "customers" | "photos">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [flavors, setFlavors] = useState<Flavor[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -89,10 +97,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchImages = async () => {
+    try {
+      const response = await fetch("/api/product-images");
+      if (response.ok) {
+        const data = await response.json();
+        setUploadedImages(data);
+      }
+    } catch (error) {
+      console.error("Error fetching images:", error);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      await Promise.all([fetchOrders(), fetchFlavors(), fetchCustomers(), fetchMenuItems()]);
+      await Promise.all([fetchOrders(), fetchFlavors(), fetchCustomers(), fetchMenuItems(), fetchImages()]);
       setIsLoading(false);
     };
 
@@ -182,6 +202,17 @@ export default function AdminDashboard() {
               }`}
             >
               Menu
+            </button>
+
+            <button
+              onClick={() => setActiveTab("photos")}
+              className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === "photos"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Photos
             </button>
           </nav>
 
@@ -276,6 +307,13 @@ export default function AdminDashboard() {
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-6">Menu Management</h2>
               <MenuManager flavors={flavors} menuItems={menuItems} onUpdate={() => { fetchFlavors(); fetchMenuItems(); }} />
+            </div>
+          )}
+
+          {activeTab === "photos" && (
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-6">Product Photos</h2>
+              <PhotoManager uploadedImages={uploadedImages} onUpdate={fetchImages} />
             </div>
           )}
         </div>
