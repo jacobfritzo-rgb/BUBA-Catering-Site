@@ -65,6 +65,28 @@ export async function PATCH(
 
     const currentStatus = result.rows[0].status as OrderStatus;
 
+    // Build dynamic update for extra fields (rejection_reason, metrospeedy, etc.)
+    const extraUpdates: string[] = [];
+    const extraArgs: (string | number | null)[] = [];
+    if (body.rejection_reason !== undefined) {
+      extraUpdates.push("rejection_reason = ?");
+      extraArgs.push(body.rejection_reason);
+    }
+    if (body.metrospeedy_status !== undefined) {
+      extraUpdates.push("metrospeedy_status = ?");
+      extraArgs.push(body.metrospeedy_status);
+    }
+    if (body.metrospeedy_notes !== undefined) {
+      extraUpdates.push("metrospeedy_notes = ?");
+      extraArgs.push(body.metrospeedy_notes);
+    }
+    if (extraUpdates.length > 0) {
+      await db.execute({
+        sql: `UPDATE orders SET ${extraUpdates.join(', ')} WHERE id = ?`,
+        args: [...extraArgs, id],
+      });
+    }
+
     // Handle status update — admin can set any status (no restrictions)
     if (body.status && body.status !== currentStatus) {
       await db.execute({
@@ -72,7 +94,7 @@ export async function PATCH(
         args: [body.status, id],
       });
 
-      // Fetch full updated order for email notification
+      // Fetch full updated order for email notification (includes rejection_reason just written)
       const orderResult = await db.execute({
         sql: "SELECT * FROM orders WHERE id = ?",
         args: [id],

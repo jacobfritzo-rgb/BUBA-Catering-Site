@@ -37,6 +37,8 @@ export default function AdminDashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingOrders, setIsDeletingOrders] = useState(false);
   const router = useRouter();
 
   const fetchOrders = async () => {
@@ -96,6 +98,21 @@ export default function AdminDashboard() {
 
     loadData();
   }, []);
+
+  const handleDeleteAllOrders = async () => {
+    setIsDeletingOrders(true);
+    try {
+      const res = await fetch("/api/orders", { method: "DELETE" });
+      if (res.ok) {
+        setOrders([]);
+        setShowDeleteConfirm(false);
+      }
+    } catch (error) {
+      console.error("Error deleting orders:", error);
+    } finally {
+      setIsDeletingOrders(false);
+    }
+  };
 
   const handleLogout = async () => {
     // Clear the cookie by calling a logout endpoint or just redirect
@@ -187,6 +204,37 @@ export default function AdminDashboard() {
             >
               Logout
             </button>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Danger Zone</p>
+              {!showDeleteConfirm ? (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors text-sm border border-red-200"
+                >
+                  🗑 Delete All Orders
+                </button>
+              ) : (
+                <div className="bg-red-50 border border-red-300 rounded p-3 space-y-2">
+                  <p className="text-xs font-semibold text-red-700">Delete ALL orders? This cannot be undone.</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDeleteAllOrders}
+                      disabled={isDeletingOrders}
+                      className="flex-1 bg-red-600 text-white text-xs font-black uppercase py-1.5 rounded hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isDeletingOrders ? "Deleting..." : "Yes, Delete"}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="flex-1 bg-white text-gray-700 text-xs font-black uppercase py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>

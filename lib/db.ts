@@ -198,6 +198,55 @@ export async function initDb() {
       }
     }
 
+    // Create order_notes table for CRM activity log
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS order_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        note_type TEXT NOT NULL,
+        content TEXT NOT NULL
+      )
+    `);
+
+    // Migrate orders table: add new columns if they don't exist yet
+    const ordersMigrations = [
+      "ALTER TABLE orders ADD COLUMN rejection_reason TEXT",
+      "ALTER TABLE orders ADD COLUMN metrospeedy_status TEXT DEFAULT 'not_submitted'",
+      "ALTER TABLE orders ADD COLUMN metrospeedy_notes TEXT",
+    ];
+    for (const sql of ordersMigrations) {
+      try { await db.execute(sql); } catch { /* column already exists */ }
+    }
+
+    // Migrate email_templates table: add customer email columns if they don't exist
+    const templatesMigrations = [
+      "ALTER TABLE email_templates ADD COLUMN customer_subject TEXT DEFAULT ''",
+      "ALTER TABLE email_templates ADD COLUMN customer_body_html TEXT DEFAULT ''",
+    ];
+    for (const sql of templatesMigrations) {
+      try { await db.execute(sql); } catch { /* column already exists */ }
+    }
+
+    // Seed customer email templates for approved/rejected if not yet populated
+    const adminUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://buba-catering-site-production.up.railway.app';
+    await db.execute({
+      sql: `UPDATE email_templates SET customer_subject = ?, customer_body_html = ?
+            WHERE trigger_name = 'order_approved' AND (customer_subject = '' OR customer_subject IS NULL)`,
+      args: [
+        'Your BUBA Catering order #{{order_id}} is confirmed!',
+        `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p><p>Thank you for choosing BUBA Catering!</p>`,
+      ],
+    });
+    await db.execute({
+      sql: `UPDATE email_templates SET customer_subject = ?, customer_body_html = ?
+            WHERE trigger_name = 'order_rejected' AND (customer_subject = '' OR customer_subject IS NULL)`,
+      args: [
+        'Regarding your BUBA Catering order #{{order_id}}',
+        `<p>Hi {{customer_name}},</p><p>Thank you for your interest in BUBA Catering. Unfortunately, we're unable to fulfill your order at this time.</p><p>{{rejection_reason}}</p><p>We hope to serve you in the future. Please don't hesitate to reach out with any questions.</p><p>— The BUBA Team</p>`,
+      ],
+    });
+
     isInitialized = true;
   } catch (error) {
     console.error("Database initialization error:", error);

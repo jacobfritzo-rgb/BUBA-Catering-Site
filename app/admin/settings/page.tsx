@@ -14,6 +14,8 @@ interface EmailTemplate {
   label: string;
   subject: string;
   body_html: string;
+  customer_subject: string;
+  customer_body_html: string;
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -37,6 +39,7 @@ const AVAILABLE_VARIABLES = [
   { name: "{{items_html}}", desc: "Box & flavor breakdown (HTML)" },
   { name: "{{admin_url}}", desc: "Link to admin dashboard" },
   { name: "{{production_sheet}}", desc: "Full kitchen production sheet (order_paid only)" },
+  { name: "{{rejection_reason}}", desc: "Rejection reason (order_rejected only)" },
 ];
 
 export default function Settings() {
@@ -70,7 +73,7 @@ export default function Settings() {
     ));
   };
 
-  const updateTemplate = (field: "subject" | "body_html", value: string) => {
+  const updateTemplate = (field: "subject" | "body_html" | "customer_subject" | "customer_body_html", value: string) => {
     setTemplates(prev => prev.map(t =>
       t.trigger_name === activeTemplate ? { ...t, [field]: value } : t
     ));
@@ -106,6 +109,8 @@ export default function Settings() {
           trigger_name: currentTemplate.trigger_name,
           subject: currentTemplate.subject,
           body_html: currentTemplate.body_html,
+          customer_subject: currentTemplate.customer_subject || '',
+          customer_body_html: currentTemplate.customer_body_html || '',
         }),
       });
       setTemplateMsg(res.ok ? "Template saved!" : "Failed to save template.");
@@ -225,25 +230,64 @@ export default function Settings() {
           </div>
 
           {currentTemplate && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-black uppercase tracking-wide mb-1">Subject</label>
-                <input
-                  type="text"
-                  value={currentTemplate.subject}
-                  onChange={(e) => updateTemplate("subject", e.target.value)}
-                  className="w-full px-3 py-2 border-2 border-black text-sm font-medium"
-                />
+            <div className="space-y-6">
+              {/* Admin notification template */}
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-wide text-gray-500 border-b border-gray-200 pb-1">
+                  Admin / Internal Notification
+                </p>
+                <div>
+                  <label className="block text-sm font-black uppercase tracking-wide mb-1">Subject</label>
+                  <input
+                    type="text"
+                    value={currentTemplate.subject}
+                    onChange={(e) => updateTemplate("subject", e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-black text-sm font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-black uppercase tracking-wide mb-1">Body (HTML)</label>
+                  <textarea
+                    value={currentTemplate.body_html}
+                    onChange={(e) => updateTemplate("body_html", e.target.value)}
+                    rows={10}
+                    className="w-full px-3 py-2 border-2 border-black text-sm font-mono"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-black uppercase tracking-wide mb-1">Body (HTML)</label>
-                <textarea
-                  value={currentTemplate.body_html}
-                  onChange={(e) => updateTemplate("body_html", e.target.value)}
-                  rows={14}
-                  className="w-full px-3 py-2 border-2 border-black text-sm font-mono"
-                />
-              </div>
+
+              {/* Customer-facing template (approved + rejected only) */}
+              {(currentTemplate.trigger_name === "order_approved" || currentTemplate.trigger_name === "order_rejected") && (
+                <div className="space-y-3 border-2 border-blue-200 bg-blue-50 p-4 rounded">
+                  <p className="text-xs font-black uppercase tracking-wide text-blue-700 border-b border-blue-200 pb-1">
+                    Customer Email — sent to {"{{"+"customer_email"+"}}"} on this trigger
+                  </p>
+                  <div>
+                    <label className="block text-sm font-black uppercase tracking-wide mb-1 text-blue-800">Customer Subject</label>
+                    <input
+                      type="text"
+                      value={currentTemplate.customer_subject || ""}
+                      onChange={(e) => updateTemplate("customer_subject", e.target.value)}
+                      placeholder="Leave blank to skip customer email"
+                      className="w-full px-3 py-2 border-2 border-blue-300 text-sm font-medium bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-black uppercase tracking-wide mb-1 text-blue-800">Customer Body (HTML)</label>
+                    <textarea
+                      value={currentTemplate.customer_body_html || ""}
+                      onChange={(e) => updateTemplate("customer_body_html", e.target.value)}
+                      rows={10}
+                      placeholder="Leave blank to skip customer email"
+                      className="w-full px-3 py-2 border-2 border-blue-300 text-sm font-mono bg-white"
+                    />
+                  </div>
+                  <p className="text-xs text-blue-600">
+                    💡 Leave both fields blank to disable the customer email for this trigger.
+                    {currentTemplate.trigger_name === "order_rejected" && " Use {{rejection_reason}} to include the admin-entered reason."}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

@@ -236,6 +236,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE() {
+  await initDb();
+  try {
+    await db.execute("DELETE FROM orders");
+    await db.execute("DELETE FROM order_notes");
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting orders:", error);
+    return NextResponse.json({ error: "Failed to delete orders" }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest) {
   await initDb();
 

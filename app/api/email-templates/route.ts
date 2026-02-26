@@ -17,10 +17,10 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   await initDb();
   try {
-    const { trigger_name, subject, body_html } = await request.json();
+    const { trigger_name, subject, body_html, customer_subject, customer_body_html } = await request.json();
     await db.execute({
-      sql: "UPDATE email_templates SET subject = ?, body_html = ? WHERE trigger_name = ?",
-      args: [subject, body_html, trigger_name],
+      sql: "UPDATE email_templates SET subject = ?, body_html = ?, customer_subject = ?, customer_body_html = ? WHERE trigger_name = ?",
+      args: [subject, body_html, customer_subject ?? '', customer_body_html ?? '', trigger_name],
     });
     return NextResponse.json({ success: true });
   } catch (error) {

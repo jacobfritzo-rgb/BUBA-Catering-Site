@@ -51,6 +51,7 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     items_html: itemsHtml + addonsHtml,
     admin_url: `${baseUrl}/admin`,
     production_sheet: productionSheetHTML || '',
+    rejection_reason: order.rejection_reason || '',
   };
 }
 
@@ -116,6 +117,16 @@ export async function sendNotification(
 
     await sendEmail(recipients, subject, html);
     console.log(`Notification sent for trigger: ${triggerName}, order: #${order.id}`);
+
+    // Send customer-facing email if template has customer fields configured
+    const customerSubject = (template.customer_subject as string || '').trim();
+    const customerBodyHtml = (template.customer_body_html as string || '').trim();
+    if (customerSubject && customerBodyHtml && order.customer_email) {
+      const customerSubjectFinal = substitute(customerSubject, vars);
+      const customerHtmlFinal = substitute(customerBodyHtml, vars);
+      await sendEmail([order.customer_email], customerSubjectFinal, customerHtmlFinal);
+      console.log(`Customer email sent for trigger: ${triggerName}, to: ${order.customer_email}`);
+    }
   } catch (error) {
     console.error(`Failed to send notification for trigger ${triggerName}:`, error);
     throw error;

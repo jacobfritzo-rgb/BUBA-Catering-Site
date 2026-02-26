@@ -48,6 +48,17 @@ export interface Order {
   bake_deadline: string;
   total_price: number;
   kitchen_notified: number;
+  rejection_reason?: string | null;
+  metrospeedy_status?: string;
+  metrospeedy_notes?: string | null;
+}
+
+export interface OrderNote {
+  id: number;
+  order_id: number;
+  created_at: string;
+  note_type: string;
+  content: string;
 }
 
 export interface Flavor {
@@ -79,6 +90,9 @@ export interface CreateOrderRequest {
 export interface UpdateOrderRequest {
   status?: OrderStatus;
   kitchen_notified?: number;
+  rejection_reason?: string;
+  metrospeedy_status?: string;
+  metrospeedy_notes?: string;
 }
 
 export interface CreateFlavorRequest {
