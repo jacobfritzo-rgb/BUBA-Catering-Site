@@ -16,12 +16,13 @@ export default function ProductShowcase() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Party Box */}
           <div className="border-4 border-black">
-            {/* Photo Placeholder */}
-            <div className="bg-gray-200 h-64 flex items-center justify-center border-b-4 border-black">
-              <div className="text-center p-4">
-                <p className="text-xs font-black uppercase text-gray-600 mb-2">Photo: Party Box</p>
-                <p className="text-xs text-gray-500">Add image at /public/images/party-box.jpg</p>
-              </div>
+            {/* Party Box Photo */}
+            <div className="border-b-4 border-black">
+              <img
+                src="/images/party-box.jpg"
+                alt="BUBA Party Box - 40 mini burekas"
+                className="w-full h-64 object-cover"
+              />
             </div>
 
             <div className="bg-[#E10600] text-white p-6 border-b-4 border-black">
