@@ -14,7 +14,7 @@ async function sendEmail(to: string[], subject: string, html: string) {
     return;
   }
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <onboarding@resend.dev>',
+    from: process.env.RESEND_FROM_EMAIL || 'BUBA Catering <orders@send.bubabureka.com>',
     to,
     subject,
     html,
