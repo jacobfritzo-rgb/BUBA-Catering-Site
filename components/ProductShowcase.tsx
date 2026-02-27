@@ -1,6 +1,19 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 export default function ProductShowcase() {
+  const [imageKeys, setImageKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch("/api/product-images")
+      .then((res) => res.json())
+      .then((data: { key: string }[]) => {
+        setImageKeys(new Set(data.map((img) => img.key)));
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="bg-white py-16 px-4 border-b-4 border-black">
       <div className="max-w-6xl mx-auto">
@@ -16,13 +29,18 @@ export default function ProductShowcase() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Party Box */}
           <div className="border-4 border-black">
-            {/* Party Box Photo */}
             <div className="border-b-4 border-black">
-              <img
-                src="/images/party-box.jpg"
-                alt="BUBA Party Box - 40 mini burekas"
-                className="w-full h-64 object-cover"
-              />
+              {imageKeys.has("party-box") ? (
+                <img
+                  src="/api/product-images/party-box"
+                  alt="BUBA Party Box - 40 mini burekas"
+                  className="w-full h-64 object-cover"
+                />
+              ) : (
+                <div className="bg-gray-200 h-64 flex items-center justify-center">
+                  <p className="text-sm text-gray-500 font-medium">Photo coming soon</p>
+                </div>
+              )}
             </div>
 
             <div className="bg-[#E10600] text-white p-6 border-b-4 border-black">
@@ -54,12 +72,18 @@ export default function ProductShowcase() {
 
           {/* Big Box */}
           <div className="border-4 border-black">
-            {/* Photo Placeholder */}
-            <div className="bg-gray-200 h-64 flex items-center justify-center border-b-4 border-black">
-              <div className="text-center p-4">
-                <p className="text-xs font-black uppercase text-gray-600 mb-2">Photo: Big Box</p>
-                <p className="text-xs text-gray-500">Add image at /public/images/big-box.jpg</p>
-              </div>
+            <div className="border-b-4 border-black">
+              {imageKeys.has("big-box") ? (
+                <img
+                  src="/api/product-images/big-box"
+                  alt="BUBA Big Box - 8 half-size burekas"
+                  className="w-full h-64 object-cover"
+                />
+              ) : (
+                <div className="bg-gray-200 h-64 flex items-center justify-center">
+                  <p className="text-sm text-gray-500 font-medium">Photo coming soon</p>
+                </div>
+              )}
             </div>
 
             <div className="bg-[#E10600] text-white p-6 border-b-4 border-black">

@@ -209,6 +209,38 @@ export async function initDb() {
       )
     `);
 
+    // Create product_images table for admin-uploaded photos
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS product_images (
+        key TEXT PRIMARY KEY,
+        image_data TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
+    // Seed party-box image from static file if not already in DB
+    const partyBoxResult = await db.execute(
+      "SELECT key FROM product_images WHERE key = 'party-box'"
+    );
+    if (partyBoxResult.rows.length === 0) {
+      try {
+        const fs = await import("fs");
+        const path = await import("path");
+        const imagePath = path.join(process.cwd(), "public", "images", "party-box.jpg");
+        if (fs.existsSync(imagePath)) {
+          const imageBuffer = fs.readFileSync(imagePath);
+          const base64 = imageBuffer.toString("base64");
+          await db.execute({
+            sql: "INSERT OR IGNORE INTO product_images (key, image_data, content_type, updated_at) VALUES (?, ?, ?, ?)",
+            args: ["party-box", base64, "image/jpeg", new Date().toISOString()],
+          });
+        }
+      } catch {
+        // Static file may not be available in all environments
+      }
+    }
+
     // Migrate orders table: add new columns if they don't exist yet
     const ordersMigrations = [
       "ALTER TABLE orders ADD COLUMN rejection_reason TEXT",
