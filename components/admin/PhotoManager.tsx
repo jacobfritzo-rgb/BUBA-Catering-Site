@@ -21,6 +21,9 @@ const PRODUCT_PHOTOS: ProductPhoto[] = [
   },
 ];
 
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
 interface UploadedImage {
   key: string;
   content_type: string;
@@ -32,59 +35,75 @@ interface PhotoManagerProps {
   onUpdate: () => void;
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerProps) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [success, setSuccess] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const hasImage = (key: string) =>
-    uploadedImages.some((img) => img.key === key);
+  const hasImage = (key: string) => uploadedImages.some((img) => img.key === key);
+
+  const setCardError = (key: string, msg: string) =>
+    setErrors((prev) => ({ ...prev, [key]: msg }));
+  const clearCardError = (key: string) =>
+    setErrors((prev) => { const next = { ...prev }; delete next[key]; return next; });
 
   const handleUpload = async (key: string, file: File) => {
-    setUploading(key);
-    setError(null);
+    clearCardError(key);
+    setSuccess(null);
 
+    // Client-side validation
+    if (!ACCEPTED_TYPES.includes(file.type) && !file.name.toLowerCase().endsWith(".heic")) {
+      setCardError(key, `Unsupported file type "${file.type || file.name.split(".").pop()}". Please use JPG, PNG, WebP, or HEIC.`);
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      setCardError(key, `File is ${formatBytes(file.size)} — must be under 5 MB. Try compressing the image first.`);
+      return;
+    }
+
+    setUploading(key);
     try {
       const formData = new FormData();
       formData.append("key", key);
       formData.append("file", file);
 
-      const res = await fetch("/api/product-images", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch("/api/product-images", { method: "POST", body: formData });
 
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Upload failed");
       }
 
+      setSuccess("Photo uploaded successfully!");
       onUpdate();
     } catch (err: any) {
-      setError(err.message);
+      setCardError(key, err.message);
     } finally {
       setUploading(null);
     }
   };
 
   const handleDelete = async (key: string) => {
+    clearCardError(key);
+    setSuccess(null);
     setDeleting(key);
-    setError(null);
-
     try {
-      const res = await fetch(`/api/product-images/${key}`, {
-        method: "DELETE",
-      });
-
+      const res = await fetch(`/api/product-images/${key}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Delete failed");
       }
-
+      setSuccess("Photo removed.");
       onUpdate();
     } catch (err: any) {
-      setError(err.message);
+      setCardError(key, err.message);
     } finally {
       setDeleting(null);
     }
@@ -92,13 +111,20 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
 
   return (
     <div>
-      <p className="text-gray-600 mb-6">
-        Upload photos for each product. Images are displayed on the main ordering page.
-      </p>
+      {/* Requirements banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm font-semibold text-blue-800 mb-1">Photo requirements</p>
+        <ul className="text-sm text-blue-700 space-y-0.5 list-disc list-inside">
+          <li>Formats: JPG, PNG, WebP, or HEIC (iPhone photos work fine)</li>
+          <li>Max file size: 5 MB</li>
+          <li>Best dimensions: landscape or square, at least 800 × 600 px</li>
+        </ul>
+      </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
+      {success && (
+        <div className="bg-green-50 border border-green-300 text-green-800 px-4 py-3 rounded mb-6 flex justify-between items-center">
+          <span>{success}</span>
+          <button onClick={() => setSuccess(null)} className="text-green-600 hover:text-green-900 font-bold ml-4">✕</button>
         </div>
       )}
 
@@ -107,9 +133,8 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
           const imageExists = hasImage(product.key);
           const isUploading = uploading === product.key;
           const isDeleting = deleting === product.key;
-          const imageInfo = uploadedImages.find(
-            (img) => img.key === product.key
-          );
+          const imageInfo = uploadedImages.find((img) => img.key === product.key);
+          const cardError = errors[product.key];
 
           return (
             <div
@@ -117,7 +142,7 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
               className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm"
             >
               {/* Image preview */}
-              <div className="h-48 bg-gray-100 relative">
+              <div className="h-52 bg-gray-100 relative">
                 {imageExists ? (
                   <img
                     src={`/api/product-images/${product.key}?t=${imageInfo?.updated_at || ""}`}
@@ -125,47 +150,39 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-center text-gray-400">
-                      <svg
-                        className="mx-auto h-12 w-12 mb-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      <p className="text-sm">No photo uploaded</p>
-                    </div>
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+                    <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <p className="text-sm font-medium">No photo yet</p>
                   </div>
                 )}
 
                 {isUploading && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="text-white font-medium">Uploading...</div>
+                  <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                    <div className="text-white font-semibold text-sm">Uploading…</div>
                   </div>
                 )}
               </div>
 
               {/* Info and actions */}
               <div className="p-4">
-                <h3 className="font-bold text-lg text-gray-900">
-                  {product.label}
-                </h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  {product.description}
-                </p>
+                <h3 className="font-bold text-lg text-gray-900">{product.label}</h3>
+                <p className="text-sm text-gray-500 mb-3">{product.description}</p>
+
+                {cardError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded mb-3">
+                    {cardError}
+                  </div>
+                )}
 
                 <div className="flex gap-2">
                   <input
                     ref={(el) => { fileInputRefs.current[product.key] = el; }}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/heic,.heic"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -175,39 +192,34 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
                   />
 
                   <button
-                    onClick={() =>
-                      fileInputRefs.current[product.key]?.click()
-                    }
-                    disabled={isUploading}
+                    onClick={() => fileInputRefs.current[product.key]?.click()}
+                    disabled={isUploading || isDeleting}
                     className="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
-                    {imageExists ? "Replace Photo" : "Upload Photo"}
+                    {isUploading ? "Uploading…" : imageExists ? "Replace Photo" : "Upload Photo"}
                   </button>
 
                   {imageExists && (
                     <button
                       onClick={() => handleDelete(product.key)}
-                      disabled={isDeleting}
+                      disabled={isUploading || isDeleting}
                       className="bg-red-100 text-red-700 text-sm font-semibold py-2 px-4 rounded hover:bg-red-200 disabled:opacity-50 transition-colors"
                     >
-                      {isDeleting ? "..." : "Remove"}
+                      {isDeleting ? "…" : "Remove"}
                     </button>
                   )}
                 </div>
 
                 {imageInfo && (
                   <p className="text-xs text-gray-400 mt-2">
-                    Updated:{" "}
-                    {new Date(imageInfo.updated_at).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      }
-                    )}
+                    Last updated:{" "}
+                    {new Date(imageInfo.updated_at).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
                   </p>
                 )}
               </div>
