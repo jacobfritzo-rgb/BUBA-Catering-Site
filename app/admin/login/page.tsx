@@ -23,31 +23,27 @@ export default function AdminLogin() {
   const handleSubmit = async () => {
     if (pin.length !== 4) return;
 
-    if (pin === "7166") {
-      // Correct PIN - log in with admin credentials
-      try {
-        const response = await fetch("/api/admin/login", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username: "Fritz", password: "7166" }),
-        });
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username: "Fritz", password: pin }),
+      });
 
-        if (response.ok) {
-          router.push("/admin");
-        }
-      } catch (err) {
-        setError("Network error. Please try again.");
+      if (response.ok) {
+        router.push("/admin");
+      } else {
+        setError("WA WAAAAAA! NO SECRET RECIPE FOR YOU!");
+        setIsShaking(true);
+        setTimeout(() => {
+          setIsShaking(false);
+          setPin("");
+        }, 1000);
       }
-    } else {
-      // Wrong PIN - show error
-      setError("WA WAAAAAA! NO SECRET RECIPE FOR YOU!");
-      setIsShaking(true);
-      setTimeout(() => {
-        setIsShaking(false);
-        setPin("");
-      }, 1000);
+    } catch (err) {
+      setError("Network error. Please try again.");
     }
   };
 
