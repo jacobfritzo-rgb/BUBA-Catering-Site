@@ -19,11 +19,22 @@ interface EmailTemplate {
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
-  new_order: "New Order Submitted",
-  order_approved: "Order Approved",
-  order_rejected: "Order Rejected",
-  order_paid: "Order Paid (Kitchen)",
-  order_completed: "Order Completed",
+  new_order: "New Order",
+  order_approved: "Approved",
+  order_rejected: "Rejected",
+  order_paid: "Paid (Kitchen)",
+  order_completed: "Completed",
+  production_done: "Production Done",
+  daily_schedule_foh: "FOH Schedule",
+  production_alert_kitchen: "Kitchen Alert",
+};
+
+const EVENT_TRIGGERS = ["new_order", "order_approved", "order_rejected", "order_paid", "order_completed", "production_done"];
+const SCHEDULED_TRIGGERS = ["daily_schedule_foh", "production_alert_kitchen"];
+
+const SCHEDULED_TRIGGER_DESCRIPTIONS: Record<string, string> = {
+  daily_schedule_foh: "Sent nightly with the next day's complete catering schedule — deliveries, pickups, customer info, and box counts. Configure your Railway cron to call GET /api/cron/daily-schedule at your preferred time (e.g., 9pm).",
+  production_alert_kitchen: "Sent nightly with a production breakdown for orders fulfilling in 48 hours — flavor totals, box counts, and per-order checklists. Sent in the same cron call as the FOH schedule.",
 };
 
 const AVAILABLE_VARIABLES = [
@@ -158,14 +169,14 @@ export default function Settings() {
           </button>
         </div>
 
-        {/* SECTION 1: Notification Recipients */}
+        {/* SECTION 1: Event Notification Recipients */}
         <div className="border-4 border-black p-6 mb-8">
-          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Notification Recipients</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Event Notifications</h2>
           <p className="text-sm text-gray-600 mb-6">
-            Configure who receives emails for each event. Use comma-separated addresses for multiple recipients.
+            Triggered immediately when an order changes state. Use comma-separated addresses for multiple recipients.
           </p>
           <div className="space-y-4">
-            {settings.map((s) => (
+            {settings.filter(s => EVENT_TRIGGERS.includes(s.trigger_name)).map((s) => (
               <div key={s.trigger_name} className="border-2 border-gray-200 p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <input
@@ -190,6 +201,45 @@ export default function Settings() {
               </div>
             ))}
           </div>
+
+          {/* Scheduled Notifications */}
+          <div className="mt-8 pt-6 border-t-2 border-gray-300">
+            <h3 className="text-lg font-black uppercase tracking-tight mb-1">Scheduled Notifications</h3>
+            <p className="text-sm text-gray-600 mb-2">
+              Sent on a schedule via Railway cron. Configure recipients here, then set up a cron job in Railway to call:
+            </p>
+            <code className="block text-xs bg-gray-100 border border-gray-300 px-3 py-2 rounded mb-4 font-mono">
+              GET /api/cron/daily-schedule — add header: x-cron-secret: [your CRON_SECRET env var]
+            </code>
+            <div className="space-y-4">
+              {settings.filter(s => SCHEDULED_TRIGGERS.includes(s.trigger_name)).map((s) => (
+                <div key={s.trigger_name} className="border-2 border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <input
+                      type="checkbox"
+                      id={`toggle-${s.trigger_name}`}
+                      checked={s.enabled === 1}
+                      onChange={(e) => updateSetting(s.trigger_name, "enabled", e.target.checked ? 1 : 0)}
+                      className="w-5 h-5 cursor-pointer"
+                    />
+                    <label htmlFor={`toggle-${s.trigger_name}`} className="font-black uppercase tracking-wide text-sm cursor-pointer">
+                      {TRIGGER_LABELS[s.trigger_name] || s.trigger_name}
+                    </label>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">{SCHEDULED_TRIGGER_DESCRIPTIONS[s.trigger_name]}</p>
+                  <input
+                    type="text"
+                    value={s.recipients}
+                    onChange={(e) => updateSetting(s.trigger_name, "recipients", e.target.value)}
+                    placeholder="email@example.com, another@example.com"
+                    disabled={s.enabled === 0}
+                    className="w-full px-3 py-2 border-2 border-blue-300 text-sm font-medium bg-white disabled:opacity-40 disabled:bg-gray-100"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-center gap-4 mt-6">
             <button
               onClick={saveSettings}

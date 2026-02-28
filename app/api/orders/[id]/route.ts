@@ -80,6 +80,12 @@ export async function PATCH(
       extraUpdates.push("metrospeedy_notes = ?");
       extraArgs.push(body.metrospeedy_notes);
     }
+    if (body.production_done !== undefined) {
+      extraUpdates.push("production_done = ?");
+      extraArgs.push(body.production_done);
+      extraUpdates.push("production_done_at = ?");
+      extraArgs.push(body.production_done === 1 ? new Date().toISOString() : null);
+    }
     if (extraUpdates.length > 0) {
       await db.execute({
         sql: `UPDATE orders SET ${extraUpdates.join(', ')} WHERE id = ?`,
@@ -129,6 +135,23 @@ export async function PATCH(
 
         sendNotification(trigger, order as any, productionSheetHTML).catch(err =>
           console.error(`Notification failed for ${trigger}:`, err)
+        );
+      }
+    }
+
+    // Handle production_done notification
+    if (body.production_done === 1) {
+      const orderResult = await db.execute({
+        sql: "SELECT * FROM orders WHERE id = ?",
+        args: [id],
+      });
+      if (orderResult.rows.length > 0) {
+        const order = {
+          ...orderResult.rows[0],
+          order_data: JSON.parse(orderResult.rows[0].order_data as string),
+        };
+        sendNotification('production_done', order as any).catch(err =>
+          console.error('production_done notification failed:', err)
         );
       }
     }

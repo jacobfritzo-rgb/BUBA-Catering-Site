@@ -51,6 +51,8 @@ export interface Order {
   rejection_reason?: string | null;
   metrospeedy_status?: string;
   metrospeedy_notes?: string | null;
+  production_done?: number;
+  production_done_at?: string | null;
 }
 
 export interface OrderNote {
@@ -93,6 +95,7 @@ export interface UpdateOrderRequest {
   rejection_reason?: string;
   metrospeedy_status?: string;
   metrospeedy_notes?: string;
+  production_done?: number;
 }
 
 export interface CreateFlavorRequest {

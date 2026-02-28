@@ -246,9 +246,53 @@ export async function initDb() {
       "ALTER TABLE orders ADD COLUMN rejection_reason TEXT",
       "ALTER TABLE orders ADD COLUMN metrospeedy_status TEXT DEFAULT 'not_submitted'",
       "ALTER TABLE orders ADD COLUMN metrospeedy_notes TEXT",
+      "ALTER TABLE orders ADD COLUMN production_done INTEGER DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN production_done_at TEXT",
     ];
     for (const sql of ordersMigrations) {
       try { await db.execute(sql); } catch { /* column already exists */ }
+    }
+
+    // Seed new event + scheduled notification triggers if they don't exist
+    const newTriggers = [
+      { trigger_name: 'production_done', enabled: 1, recipients: adminEmail },
+      { trigger_name: 'daily_schedule_foh', enabled: 0, recipients: '' },
+      { trigger_name: 'production_alert_kitchen', enabled: 0, recipients: kitchenEmail },
+    ];
+    for (const t of newTriggers) {
+      await db.execute({
+        sql: "INSERT OR IGNORE INTO email_settings (trigger_name, enabled, recipients) VALUES (?, ?, ?)",
+        args: [t.trigger_name, t.enabled, t.recipients],
+      });
+    }
+
+    // Seed new email templates if they don't exist
+    const baseUrl2 = process.env.NEXT_PUBLIC_BASE_URL || 'https://buba-catering-site-production.up.railway.app';
+    const newTemplates = [
+      {
+        trigger_name: 'production_done',
+        label: 'Production Marked Done',
+        subject: '✅ Production Done — Order #{{order_id}} ({{customer_name}})',
+        body_html: `<h2>Production Complete</h2><p>Staff has marked production as done for Order <strong>#{{order_id}}</strong>.</p><p><strong>Customer:</strong> {{customer_name}}</p><p><strong>Fulfillment:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><a href="${baseUrl2}/admin">View in Admin Dashboard</a></p>`,
+      },
+      {
+        trigger_name: 'daily_schedule_foh',
+        label: 'Daily Schedule (FOH)',
+        subject: "Tomorrow's Catering Schedule — {{schedule_date}}",
+        body_html: `<h2>Tomorrow's Catering Schedule</h2><p>{{schedule_html}}</p>`,
+      },
+      {
+        trigger_name: 'production_alert_kitchen',
+        label: 'Kitchen Production Alert',
+        subject: 'Production Needed — {{schedule_date}}',
+        body_html: `<h2>Production Alert</h2><p>{{production_html}}</p>`,
+      },
+    ];
+    for (const t of newTemplates) {
+      await db.execute({
+        sql: "INSERT OR IGNORE INTO email_templates (trigger_name, label, subject, body_html) VALUES (?, ?, ?, ?)",
+        args: [t.trigger_name, t.label, t.subject, t.body_html],
+      });
     }
 
     // Migrate email_templates table: add customer email columns if they don't exist

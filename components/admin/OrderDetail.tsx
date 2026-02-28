@@ -28,6 +28,30 @@ const METROSPEEDY_STATUSES = [
   { value: "confirmed", label: "Confirmed" },
 ];
 
+// MetroSpeedy Appendix A fee calculators
+function calcBaseDeliveryFee(orderCents: number): number {
+  const dollars = orderCents / 100;
+  if (dollars <= 500) return 35;
+  if (dollars <= 750) return 55;
+  if (dollars <= 1000) return 75;
+  // Over $1000: $75 + $25 for each $250 increment above $1000
+  const increments = Math.ceil((dollars - 1000) / 250);
+  return 75 + increments * 25;
+}
+
+function calcFuelSurcharge(gasPrice: number): number {
+  if (gasPrice < 2.25) return 0.43;
+  if (gasPrice < 2.75) return 0.53;
+  if (gasPrice < 3.25) return 0.61;
+  if (gasPrice < 3.75) return 0.71;
+  if (gasPrice < 4.25) return 0.81;
+  if (gasPrice < 4.75) return 0.90;
+  if (gasPrice < 5.25) return 0.97;
+  // $5.25+: $0.97 + $0.20 for every $0.50 above $5.25
+  const extraIncrements = Math.ceil((gasPrice - 5.25) / 0.50);
+  return parseFloat((0.97 + extraIncrements * 0.20).toFixed(2));
+}
+
 export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [message, setMessage] = useState("");
@@ -42,6 +66,17 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   const [metroNotes, setMetroNotes] = useState(order.metrospeedy_notes || "");
   const [isSavingMetro, setIsSavingMetro] = useState(false);
   const [metroMsg, setMetroMsg] = useState("");
+
+  // MetroSpeedy fee calculator state
+  const [showFeeCalc, setShowFeeCalc] = useState(false);
+  const [feeCalcMiles, setFeeCalcMiles] = useState(0);
+  const [feeCalcGasPrice, setFeeCalcGasPrice] = useState(3.50);
+  const [feeCalcSetup, setFeeCalcSetup] = useState(false);
+  const [feeCalcWaitMins, setFeeCalcWaitMins] = useState(0);
+
+  // Production done state
+  const [isMarkingProduction, setIsMarkingProduction] = useState(false);
+  const [productionMsg, setProductionMsg] = useState("");
 
   // Activity log state
   const [notes, setNotes] = useState<OrderNote[]>([]);
@@ -154,6 +189,29 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
     }
   };
 
+  const markProductionDone = async (done: boolean) => {
+    setIsMarkingProduction(true);
+    setProductionMsg("");
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ production_done: done ? 1 : 0 }),
+      });
+      if (res.ok) {
+        onUpdate();
+        setProductionMsg(done ? "Marked done! Owner notified." : "Reset.");
+      } else {
+        setProductionMsg("Failed to update.");
+      }
+    } catch {
+      setProductionMsg("Error.");
+    } finally {
+      setIsMarkingProduction(false);
+      setTimeout(() => setProductionMsg(""), 4000);
+    }
+  };
+
   const copyToClipboard = () => {
     let text = `BUBA Catering Order #${order.id}\n`;
     text += `Customer: ${order.customer_name} — ${order.customer_email} — ${order.customer_phone}\n\n`;
@@ -194,6 +252,14 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
 
   const ALL_STATUSES = ["pending", "approved", "rejected", "paid", "completed"];
   const isPaid = order.status === "paid";
+
+  // Derived fee calculator values
+  const feeBaseFee = calcBaseDeliveryFee(order.total_price);
+  const feeMileageFee = Math.max(0, feeCalcMiles - 2) * 2;
+  const feeFuelSurcharge = calcFuelSurcharge(feeCalcGasPrice);
+  const feeWaitFee = feeCalcWaitMins > 0 ? Math.ceil(feeCalcWaitMins / 15) * 12.50 : 0;
+  const feeSetupFee = feeCalcSetup ? 25 : 0;
+  const feeTotalFee = feeBaseFee + feeMileageFee + feeFuelSurcharge + feeWaitFee + feeSetupFee;
 
   return (
     <div className="space-y-6">
@@ -302,8 +368,8 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
         </div>
       )}
 
-      {/* Deadlines */}
-      <div className={isPaid ? "bg-yellow-50 border border-yellow-200 p-4 rounded" : ""}>
+      {/* Deadlines + Production Done */}
+      <div className={isPaid ? "bg-yellow-50 border border-yellow-200 p-4 rounded" : "p-4 border border-gray-200 rounded"}>
         <h4 className="text-sm font-semibold text-gray-700 mb-2">Production Deadlines</h4>
         <p className={`text-sm ${isPaid ? "font-bold text-yellow-900" : "text-gray-600"}`}>
           Production Deadline: {new Date(order.production_deadline).toLocaleDateString()}
@@ -311,6 +377,42 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
         <p className={`text-sm ${isPaid ? "font-bold text-yellow-900" : "text-gray-600"}`}>
           Bake Deadline: {new Date(order.bake_deadline).toLocaleString()}
         </p>
+
+        {/* Production checklist */}
+        <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-3 flex-wrap">
+          {order.production_done ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm font-bold border border-green-300">
+                ✅ Production Done
+              </span>
+              {order.production_done_at && (
+                <span className="text-xs text-gray-500">
+                  {new Date(order.production_done_at).toLocaleString()}
+                </span>
+              )}
+              <button
+                onClick={() => markProductionDone(false)}
+                disabled={isMarkingProduction}
+                className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+              >
+                Undo
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => markProductionDone(true)}
+              disabled={isMarkingProduction}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-black uppercase tracking-wide rounded border-2 border-green-600 disabled:opacity-50 transition-colors"
+            >
+              {isMarkingProduction ? "Saving..." : "✓ Mark Production Done"}
+            </button>
+          )}
+          {productionMsg && (
+            <span className={`text-sm font-medium ${productionMsg.includes("Failed") || productionMsg.includes("Error") ? "text-red-600" : "text-green-700"}`}>
+              {productionMsg}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Actions */}
@@ -372,6 +474,109 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                 className="border-2 border-orange-300 bg-white rounded px-3 py-2 text-sm w-full"
               />
             </div>
+            {/* Fee Calculator */}
+            <div className="border-t border-orange-200 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowFeeCalc(!showFeeCalc)}
+                className="text-sm font-bold text-orange-800 hover:text-orange-900 flex items-center gap-1"
+              >
+                {showFeeCalc ? "▲" : "▼"} Estimate Delivery Fee (Appendix A)
+              </button>
+
+              {showFeeCalc && (
+                <div className="mt-3 bg-white border border-orange-200 rounded p-3 space-y-3">
+                  {/* Auto-populated order value + base fee */}
+                  <div className="text-sm space-y-1 pb-2 border-b border-gray-100">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Order Value:</span>
+                      <span className="font-bold">${(order.total_price / 100).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Base Delivery Fee:</span>
+                      <span className="font-bold text-orange-800">${feeBaseFee.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Miles input */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                      Miles from Bleecker St <span className="font-normal text-gray-400">(first 2 free, +$2/mi after)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={feeCalcMiles}
+                      onChange={(e) => setFeeCalcMiles(parseFloat(e.target.value) || 0)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                    {feeMileageFee > 0 && (
+                      <p className="text-xs text-orange-700 mt-0.5">+${feeMileageFee.toFixed(2)} ({Math.max(0, feeCalcMiles - 2).toFixed(1)} billable mi)</p>
+                    )}
+                  </div>
+
+                  {/* Gas price for fuel surcharge */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                      Avg Gas Price ($/gal) <span className="font-normal text-gray-400">for fuel surcharge</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.05"
+                      value={feeCalcGasPrice}
+                      onChange={(e) => setFeeCalcGasPrice(parseFloat(e.target.value) || 3.50)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                    <p className="text-xs text-orange-700 mt-0.5">Fuel surcharge: +${feeFuelSurcharge.toFixed(2)}</p>
+                  </div>
+
+                  {/* Optional: Setup fee */}
+                  <label className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={feeCalcSetup}
+                      onChange={(e) => setFeeCalcSetup(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span>Setup Required <span className="text-gray-500">(+$25.00)</span></span>
+                  </label>
+
+                  {/* Optional: Wait time */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                      Wait Time (minutes) <span className="font-normal text-gray-400">$12.50 per 15 min</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="15"
+                      value={feeCalcWaitMins}
+                      onChange={(e) => setFeeCalcWaitMins(parseInt(e.target.value) || 0)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                    {feeWaitFee > 0 && (
+                      <p className="text-xs text-orange-700 mt-0.5">+${feeWaitFee.toFixed(2)}</p>
+                    )}
+                  </div>
+
+                  {/* Total */}
+                  <div className="border-t-2 border-orange-300 pt-2 space-y-0.5 text-xs text-gray-500">
+                    <div className="flex justify-between"><span>Base fee:</span><span>${feeBaseFee.toFixed(2)}</span></div>
+                    {feeMileageFee > 0 && <div className="flex justify-between"><span>Mileage:</span><span>+${feeMileageFee.toFixed(2)}</span></div>}
+                    <div className="flex justify-between"><span>Fuel surcharge:</span><span>+${feeFuelSurcharge.toFixed(2)}</span></div>
+                    {feeSetupFee > 0 && <div className="flex justify-between"><span>Setup fee:</span><span>+$25.00</span></div>}
+                    {feeWaitFee > 0 && <div className="flex justify-between"><span>Wait time:</span><span>+${feeWaitFee.toFixed(2)}</span></div>}
+                    <div className="flex justify-between font-black text-sm text-orange-900 border-t border-orange-200 pt-1 mt-1">
+                      <span>ESTIMATED TOTAL:</span>
+                      <span>${feeTotalFee.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               <button
                 onClick={saveMetrospeedy}

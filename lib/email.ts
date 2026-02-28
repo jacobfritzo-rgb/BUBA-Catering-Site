@@ -158,6 +158,166 @@ export async function sendNotification(
   }
 }
 
+// Send a scheduled notification (not tied to a single order) using configured recipients
+export async function sendScheduledNotification(
+  triggerName: string,
+  subject: string,
+  html: string
+) {
+  try {
+    const settingsResult = await db.execute({
+      sql: "SELECT * FROM email_settings WHERE trigger_name = ?",
+      args: [triggerName],
+    });
+    if (settingsResult.rows.length === 0 || !settingsResult.rows[0].enabled) return;
+
+    const recipientsStr = settingsResult.rows[0].recipients as string;
+    const recipients = recipientsStr.split(',').map(r => r.trim()).filter(Boolean);
+    if (recipients.length === 0) return;
+
+    await sendEmail(recipients, subject, html);
+    console.log(`Scheduled notification sent for trigger: ${triggerName}`);
+  } catch (err) {
+    console.error(`Failed to send scheduled notification ${triggerName}:`, err);
+    throw err;
+  }
+}
+
+export function generateFOHScheduleHTML(orders: Order[], date: Date): string {
+  const dateLabel = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const deliveries = orders.filter(o => o.fulfillment_type === 'delivery');
+  const pickups = orders.filter(o => o.fulfillment_type === 'pickup');
+
+  let html = `<div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">`;
+  html += `<h1 style="background: #E10600; color: white; padding: 15px 20px; margin: 0; font-size: 22px;">BUBA Catering — Tomorrow's Schedule</h1>`;
+  html += `<p style="background: #222; color: white; padding: 10px 20px; margin: 0; font-size: 16px;">${dateLabel}</p>`;
+
+  if (orders.length === 0) {
+    html += `<p style="padding: 20px; color: #666;">No orders scheduled for tomorrow.</p>`;
+  } else {
+    html += `<p style="padding: 15px 20px; background: #f9f9f9; border-bottom: 1px solid #ddd; font-weight: bold; margin: 0;">${orders.length} order${orders.length !== 1 ? 's' : ''} total — ${deliveries.length} delivery, ${pickups.length} pickup</p>`;
+
+    if (deliveries.length > 0) {
+      html += `<div style="padding: 15px 20px;">`;
+      html += `<h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #E10600; padding-bottom: 5px; color: #E10600;">📦 Deliveries (${deliveries.length})</h2>`;
+      html += `<table style="width: 100%; border-collapse: collapse; font-size: 14px;">`;
+      html += `<tr style="background: #f0f0f0;"><th style="padding: 8px; text-align: left;">Time</th><th style="padding: 8px; text-align: left;">Customer</th><th style="padding: 8px; text-align: left;">Address</th><th style="padding: 8px; text-align: left;">Phone</th><th style="padding: 8px; text-align: left;">Boxes</th></tr>`;
+      deliveries
+        .sort((a, b) => (a.delivery_window_start || '').localeCompare(b.delivery_window_start || ''))
+        .forEach((order, i) => {
+          const boxes = order.order_data.items.map(item =>
+            `${item.type === 'party_box' ? 'Party' : 'Big'} x${item.quantity}`
+          ).join(', ');
+          html += `<tr style="background: ${i % 2 === 0 ? '#fff' : '#f9f9f9'}; border-bottom: 1px solid #eee;">`;
+          html += `<td style="padding: 8px; font-weight: bold;">${order.delivery_window_start}–${order.delivery_window_end}</td>`;
+          html += `<td style="padding: 8px; font-weight: bold;">${order.customer_name}</td>`;
+          html += `<td style="padding: 8px;">${order.delivery_address || '—'}</td>`;
+          html += `<td style="padding: 8px;">${order.customer_phone}</td>`;
+          html += `<td style="padding: 8px;">${boxes}</td>`;
+          html += `</tr>`;
+          if (order.delivery_notes) {
+            html += `<tr style="background: #fffbe6;"><td colspan="5" style="padding: 6px 8px; font-size: 12px; color: #666;">📝 ${order.delivery_notes}</td></tr>`;
+          }
+        });
+      html += `</table></div>`;
+    }
+
+    if (pickups.length > 0) {
+      html += `<div style="padding: 15px 20px;">`;
+      html += `<h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #222; padding-bottom: 5px;">🏪 Pickups (${pickups.length})</h2>`;
+      html += `<table style="width: 100%; border-collapse: collapse; font-size: 14px;">`;
+      html += `<tr style="background: #f0f0f0;"><th style="padding: 8px; text-align: left;">Time</th><th style="padding: 8px; text-align: left;">Customer</th><th style="padding: 8px; text-align: left;">Phone</th><th style="padding: 8px; text-align: left;">Boxes</th></tr>`;
+      pickups
+        .sort((a, b) => (a.pickup_time || '').localeCompare(b.pickup_time || ''))
+        .forEach((order, i) => {
+          const boxes = order.order_data.items.map(item =>
+            `${item.type === 'party_box' ? 'Party' : 'Big'} x${item.quantity}`
+          ).join(', ');
+          html += `<tr style="background: ${i % 2 === 0 ? '#fff' : '#f9f9f9'}; border-bottom: 1px solid #eee;">`;
+          html += `<td style="padding: 8px; font-weight: bold;">${order.pickup_time}</td>`;
+          html += `<td style="padding: 8px; font-weight: bold;">${order.customer_name}</td>`;
+          html += `<td style="padding: 8px;">${order.customer_phone}</td>`;
+          html += `<td style="padding: 8px;">${boxes}</td>`;
+          html += `</tr>`;
+        });
+      html += `</table></div>`;
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
+  const dateLabel = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const flavorTotals: Record<string, number> = {};
+  let partyBoxes = 0;
+  let bigBoxes = 0;
+
+  orders.forEach(order => {
+    order.order_data.items.forEach(item => {
+      if (item.type === 'party_box') partyBoxes += item.quantity;
+      else bigBoxes += item.quantity;
+      item.flavors.forEach(f => {
+        flavorTotals[f.name] = (flavorTotals[f.name] || 0) + f.quantity;
+      });
+    });
+  });
+
+  let html = `<div style="font-family: monospace; max-width: 700px; margin: 0 auto;">`;
+  html += `<h1 style="background: #111; color: #fff; padding: 15px 20px; margin: 0; font-size: 20px;">🔔 KITCHEN ALERT — Production Needed</h1>`;
+  html += `<p style="background: #E10600; color: white; padding: 10px 20px; margin: 0; font-weight: bold;">Fulfillment Date: ${dateLabel}</p>`;
+
+  if (orders.length === 0) {
+    html += `<p style="padding: 20px;">No orders to produce for this date.</p>`;
+  } else {
+    // Summary
+    html += `<div style="padding: 15px 20px; background: #f0f0f0; border-bottom: 3px solid #000;">`;
+    html += `<h2 style="margin: 0 0 10px 0; font-size: 16px; text-transform: uppercase;">PRODUCTION SUMMARY</h2>`;
+    html += `<table style="font-size: 14px; width: 100%;"><tr>`;
+    html += `<td style="font-weight: bold;">Party Boxes: ${partyBoxes} (${partyBoxes * 40} pieces)</td>`;
+    html += `<td style="font-weight: bold;">Big Boxes: ${bigBoxes} (${bigBoxes * 8} pieces)</td>`;
+    html += `</tr></table></div>`;
+
+    // Flavor breakdown
+    html += `<div style="padding: 15px 20px;">`;
+    html += `<h2 style="font-size: 15px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">FLAVORS TO PRODUCE</h2>`;
+    html += `<table style="width: 100%; border-collapse: collapse; font-size: 15px;">`;
+    Object.entries(flavorTotals)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([name, qty]) => {
+        html += `<tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px; font-weight: bold;">${name}</td><td style="padding: 8px; text-align: right; font-size: 18px;"><strong>${qty} pcs</strong></td></tr>`;
+      });
+    html += `</table></div>`;
+
+    // Per-order checklist
+    html += `<div style="padding: 15px 20px;">`;
+    html += `<h2 style="font-size: 15px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">ORDERS</h2>`;
+    orders.forEach(order => {
+      const time = order.fulfillment_type === 'delivery'
+        ? `${order.delivery_window_start}–${order.delivery_window_end}`
+        : order.pickup_time;
+      html += `<div style="border: 2px solid #000; padding: 12px; margin-bottom: 12px; background: #fff;">`;
+      html += `<div style="display: flex; justify-content: space-between; background: #ffe6e6; padding: 8px; margin: -12px -12px 10px -12px;">`;
+      html += `<strong>Order #${order.id} — ${order.customer_name}</strong>`;
+      html += `<span>${order.fulfillment_type === 'delivery' ? '📦 Delivery' : '🏪 Pickup'} ${time}</span>`;
+      html += `</div>`;
+      order.order_data.items.forEach(item => {
+        html += `<div style="margin-left: 10px; border-left: 3px solid #E10600; padding-left: 8px; margin-bottom: 8px;">`;
+        html += `<strong>${item.type === 'party_box' ? 'PARTY BOX' : 'BIG BOX'} x${item.quantity}</strong><br/>`;
+        item.flavors.forEach(f => { html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`; });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
 // Convenience wrappers kept for backward compat / external callers
 export async function sendNewOrderNotification(order: Order) {
   return sendNotification('new_order', order);
