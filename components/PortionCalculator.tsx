@@ -22,11 +22,20 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
   const piecesPerPerson = isMainEvent ? 4 : 2;
   const totalPieces = people * piecesPerPerson;
 
-  const partyBoxes = Math.floor(totalPieces / 40);
-  const remainingAfterParty = totalPieces % 40;
-  const bigBoxes = Math.ceil(remainingAfterParty / 8);
+  // For groups over 16, always lead with party boxes — they're better value and easier to manage.
+  // For smaller groups, only suggest a party box if the pieces genuinely call for one.
+  const preferPartyBox = people > 16;
+  const partyBoxes = preferPartyBox
+    ? Math.max(Math.floor(totalPieces / 40), 1)
+    : Math.floor(totalPieces / 40);
 
-  const allBigBoxes = Math.ceil(totalPieces / 8);
+  // Remaining pieces after party boxes are accounted for (can be negative when party
+  // boxes already cover or exceed what's needed — that's fine, slight overage is OK).
+  const remainingAfterParty = totalPieces - partyBoxes * 40;
+  const bigBoxes = remainingAfterParty > 0 ? Math.ceil(remainingAfterParty / 8) : 0;
+
+  // "All Big Boxes" alternative — always a clean number, never 0
+  const allBigBoxes = Math.max(Math.ceil(totalPieces / 8), 1);
 
   const totalCostOption1 = partyBoxes * 225 + bigBoxes * 78;
   const totalCostOption2 = allBigBoxes * 78;
