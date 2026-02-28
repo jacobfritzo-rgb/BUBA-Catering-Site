@@ -23,6 +23,7 @@ export interface Addon {
 export interface OrderData {
   items: OrderItem[];
   addons: Addon[];
+  serves_count?: number;
 }
 
 export interface Order {

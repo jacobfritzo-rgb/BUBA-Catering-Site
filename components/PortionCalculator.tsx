@@ -6,48 +6,98 @@ interface PortionCalculatorProps {
   onAddToOrder?: (partyBoxes: number, bigBoxes: number) => void;
 }
 
+interface Recommendation {
+  label: string;
+  partyBoxes: number;
+  bigBoxes: number;
+  cost: number;
+}
+
 export default function PortionCalculator({ onAddToOrder }: PortionCalculatorProps) {
   const [people, setPeople] = useState<number>(10);
   const [isMainEvent, setIsMainEvent] = useState<boolean>(true);
   const [showResults, setShowResults] = useState(false);
-  const [addedOption, setAddedOption] = useState<1 | 2 | null>(null);
+  const [addedOption, setAddedOption] = useState<"A" | "B" | null>(null);
 
   const calculate = () => {
     setShowResults(true);
     setAddedOption(null);
   };
 
-  // Party Box: serves 10-15 people (40 pieces) as main, or 20-25 as side
-  // Big Box: feeds 4-6 people (8 pieces) as main, or 8-10 as side
-  const piecesPerPerson = isMainEvent ? 4 : 2;
-  const totalPieces = people * piecesPerPerson;
+  // ─── Algorithm ───────────────────────────────────────────────────────────────
+  // Two-track recommendations, never more than 4 big boxes in any single recommendation.
+  //
+  // Main course: 2 pcs/person for all-big-box option, 3 pcs/person for party box option
+  // Side dish: 1.5 pcs/person — big boxes only if ≤2 needed, else party box
+  //
+  // Verified against owner's examples:
+  //   10 main → 3 big boxes OR 1 party box
+  //   15 main → 4 big boxes OR 1 party box + 1 big box
+  //   10 side → 2 big boxes
+  //   15 side → 1 party box
 
-  // For groups over 16, always lead with party boxes — they're better value and easier to manage.
-  // For smaller groups, only suggest a party box if the pieces genuinely call for one.
-  const preferPartyBox = people > 16;
-  const partyBoxes = preferPartyBox
-    ? Math.max(Math.floor(totalPieces / 40), 1)
-    : Math.floor(totalPieces / 40);
+  let optionA: Recommendation | null = null; // Big boxes only (main course ≤4 big boxes)
+  let optionB: Recommendation | null = null; // Party box route (main course)
+  let singleRec: Recommendation | null = null; // Single recommendation (side dish, or main when rawBig > 4)
 
-  // Remaining pieces after party boxes are accounted for (can be negative when party
-  // boxes already cover or exceed what's needed — that's fine, slight overage is OK).
-  const remainingAfterParty = totalPieces - partyBoxes * 40;
-  const bigBoxes = remainingAfterParty > 0 ? Math.ceil(remainingAfterParty / 8) : 0;
+  if (isMainEvent) {
+    const rawBigBoxes = Math.ceil((people * 2) / 8);
 
-  // "All Big Boxes" alternative — always a clean number, never 0
-  const allBigBoxes = Math.max(Math.ceil(totalPieces / 8), 1);
+    // Party box calculation: 3 pcs/person
+    const partyPieces = people * 3;
+    let partyBoxCount = Math.max(1, Math.floor(partyPieces / 40));
+    let remainder = Math.max(0, partyPieces - partyBoxCount * 40);
+    let extraBig = remainder > 0 ? Math.ceil(remainder / 8) : 0;
 
-  const totalCostOption1 = partyBoxes * 225 + bigBoxes * 78;
-  const totalCostOption2 = allBigBoxes * 78;
-
-  const handleAdd = (option: 1 | 2) => {
-    if (!onAddToOrder) return;
-    if (option === 1) {
-      onAddToOrder(partyBoxes, bigBoxes);
-    } else {
-      onAddToOrder(0, allBigBoxes);
+    // If extra big boxes exceed 4, round up to another party box
+    if (extraBig > 4) {
+      partyBoxCount = Math.ceil(partyPieces / 40);
+      remainder = Math.max(0, partyPieces - partyBoxCount * 40);
+      extraBig = remainder > 0 ? Math.ceil(remainder / 8) : 0;
     }
+
+    const partyLabel =
+      extraBig > 0
+        ? `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""} + ${extraBig} Big Box${extraBig > 1 ? "es" : ""}`
+        : `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""}`;
+    const partyCost = partyBoxCount * 225 + extraBig * 78;
+
+    if (rawBigBoxes <= 4) {
+      // Show both options side by side
+      const bigLabel = `${rawBigBoxes} Big Box${rawBigBoxes > 1 ? "es" : ""}`;
+      optionA = { label: bigLabel, partyBoxes: 0, bigBoxes: rawBigBoxes, cost: rawBigBoxes * 78 };
+      optionB = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: extraBig, cost: partyCost };
+    } else {
+      // rawBig > 4: only recommend the party box route
+      singleRec = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: extraBig, cost: partyCost };
+    }
+  } else {
+    // Side dish: 1.5 pcs/person
+    const rawBigBoxes = Math.ceil((people * 1.5) / 8);
+
+    if (rawBigBoxes <= 2) {
+      const bigLabel = `${rawBigBoxes} Big Box${rawBigBoxes > 1 ? "es" : ""}`;
+      singleRec = { label: bigLabel, partyBoxes: 0, bigBoxes: rawBigBoxes, cost: rawBigBoxes * 78 };
+    } else {
+      const partyBoxCount = Math.ceil((people * 1.5) / 40);
+      const partyLabel = `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""}`;
+      singleRec = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: 0, cost: partyBoxCount * 225 };
+    }
+  }
+
+  const handleAdd = (option: "A" | "B") => {
+    if (!onAddToOrder) return;
+    const rec = option === "A" ? optionA : optionB;
+    if (!rec) return;
+    onAddToOrder(rec.partyBoxes, rec.bigBoxes);
     setAddedOption(option);
+    setTimeout(() => setAddedOption(null), 2500);
+  };
+
+  const handleAddSingle = () => {
+    if (!onAddToOrder || !singleRec) return;
+    onAddToOrder(singleRec.partyBoxes, singleRec.bigBoxes);
+    setAddedOption("A");
     setTimeout(() => setAddedOption(null), 2500);
   };
 
@@ -125,57 +175,70 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
               <div className="border-t-4 border-black pt-6 mt-6">
                 <h4 className="font-black uppercase text-lg mb-4">Recommended Order:</h4>
 
-                <div className="space-y-4">
-                  {partyBoxes > 0 && (
+                {/* Two options: main course with rawBig ≤ 4 */}
+                {optionA && optionB && (
+                  <div className="space-y-4">
                     <div className="bg-gray-50 p-4 border-2 border-black">
-                      <p className="font-black uppercase text-sm mb-2">Option 1: Mixed Boxes</p>
-                      <p className="text-2xl font-black text-[#E10600] mb-1">
-                        {partyBoxes} Party Box{partyBoxes > 1 ? "es" : ""}{bigBoxes > 0 ? ` + ${bigBoxes} Big Box${bigBoxes > 1 ? "es" : ""}` : ""}
-                      </p>
-                      <p className="text-sm font-medium mb-3">Total: ${totalCostOption1}</p>
+                      <p className="font-black uppercase text-sm mb-2">Option 1: Big Boxes</p>
+                      <p className="text-2xl font-black text-[#E10600] mb-1">{optionA.label}</p>
+                      <p className="text-sm font-medium mb-3">Total: ${optionA.cost}</p>
                       {onAddToOrder && (
                         <button
                           type="button"
-                          onClick={() => handleAdd(1)}
+                          onClick={() => handleAdd("A")}
                           className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
-                            addedOption === 1
+                            addedOption === "A"
                               ? "bg-green-600 border-green-600 text-white"
                               : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
                           }`}
                         >
-                          {addedOption === 1 ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD OPTION 1 TO MY ORDER →"}
+                          {addedOption === "A" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD OPTION 1 TO MY ORDER →"}
                         </button>
                       )}
                     </div>
-                  )}
 
+                    <div className="bg-gray-50 p-4 border-2 border-black">
+                      <p className="font-black uppercase text-sm mb-2">Option 2: Party Box</p>
+                      <p className="text-2xl font-black text-[#E10600] mb-1">{optionB.label}</p>
+                      <p className="text-sm font-medium mb-3">Total: ${optionB.cost}</p>
+                      {onAddToOrder && (
+                        <button
+                          type="button"
+                          onClick={() => handleAdd("B")}
+                          className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
+                            addedOption === "B"
+                              ? "bg-green-600 border-green-600 text-white"
+                              : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
+                          }`}
+                        >
+                          {addedOption === "B" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD OPTION 2 TO MY ORDER →"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Single recommendation: side dish or main when rawBig > 4 */}
+                {singleRec && (
                   <div className="bg-gray-50 p-4 border-2 border-black">
-                    <p className="font-black uppercase text-sm mb-2">
-                      {partyBoxes > 0 ? "Option 2: All Big Boxes" : "Recommended:"}
-                    </p>
-                    <p className="text-2xl font-black text-[#E10600] mb-1">
-                      {allBigBoxes} Big Box{allBigBoxes > 1 ? "es" : ""}
-                    </p>
-                    <p className="text-sm font-medium mb-3">Total: ${totalCostOption2}</p>
+                    <p className="font-black uppercase text-sm mb-2">Recommended:</p>
+                    <p className="text-2xl font-black text-[#E10600] mb-1">{singleRec.label}</p>
+                    <p className="text-sm font-medium mb-3">Total: ${singleRec.cost}</p>
                     {onAddToOrder && (
                       <button
                         type="button"
-                        onClick={() => handleAdd(2)}
+                        onClick={handleAddSingle}
                         className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
-                          addedOption === 2
+                          addedOption === "A"
                             ? "bg-green-600 border-green-600 text-white"
                             : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
                         }`}
                       >
-                        {addedOption === 2
-                          ? "✓ ADDED! SCROLL DOWN TO CONTINUE"
-                          : partyBoxes > 0
-                          ? "ADD OPTION 2 TO MY ORDER →"
-                          : "ADD TO MY ORDER →"}
+                        {addedOption === "A" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD TO MY ORDER →"}
                       </button>
                     )}
                   </div>
-                </div>
+                )}
 
                 <p className="text-xs text-gray-600 mt-4 italic">
                   * These are estimates. Adjust based on your guests&apos; appetites!

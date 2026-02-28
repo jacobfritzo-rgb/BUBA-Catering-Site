@@ -42,6 +42,7 @@ export default function OrderForm() {
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [emailOptIn, setEmailOptIn] = useState(false);
+  const [servesCount, setServesCount] = useState<number | "">("");
 
   const DELIVERY_FEE = 0;
 
@@ -211,7 +212,7 @@ export default function OrderForm() {
         delivery_fee: fulfillmentType === "delivery" ? DELIVERY_FEE : 0,
         sms_opt_in: smsOptIn,
         email_opt_in: emailOptIn,
-        order_data: { items, addons: addonItems },
+        order_data: { items, addons: addonItems, serves_count: servesCount || undefined },
       };
 
       const response = await fetch("/api/orders", {
@@ -537,6 +538,21 @@ export default function OrderForm() {
                     </div>
                   </>
                 )}
+
+                {/* Number of guests */}
+                <div className="mb-4">
+                  <label className="block text-sm font-bold uppercase tracking-wide text-black mb-1">
+                    HOW MANY PEOPLE ARE YOU SERVING?
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={servesCount}
+                    onChange={(e) => setServesCount(parseInt(e.target.value) || "")}
+                    className="w-full px-4 py-2 border-2 border-black focus:border-[#E10600] focus:outline-none font-medium"
+                    placeholder="e.g. 25"
+                  />
+                </div>
 
                 {/* Step 1 error */}
                 {error && (

@@ -298,12 +298,17 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
       )}
 
       {/* Order Details */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div>
           <h4 className="text-sm font-semibold text-gray-700 mb-2">Customer Information</h4>
           <p className="text-sm text-gray-600">{order.customer_name}</p>
           <p className="text-sm text-gray-600">{order.customer_email}</p>
           <p className="text-sm text-gray-600">{order.customer_phone}</p>
+          {order.order_data.serves_count && (
+            <p className="text-sm text-gray-600 mt-1">
+              Serving: <strong>{order.order_data.serves_count} people</strong>
+            </p>
+          )}
         </div>
 
         <div>

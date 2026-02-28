@@ -91,8 +91,9 @@ export default function CalendarView({ orders }: CalendarViewProps) {
       </div>
 
       {/* Calendar */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
         {/* Month header */}
+        <div className="min-w-[420px]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <button
             onClick={prevMonth}
@@ -193,6 +194,7 @@ export default function CalendarView({ orders }: CalendarViewProps) {
             );
           })}
         </div>
+        </div>{/* end min-w wrapper */}
       </div>
 
       {/* Selected day detail */}

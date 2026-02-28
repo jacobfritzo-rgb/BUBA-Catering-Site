@@ -310,7 +310,7 @@ export async function initDb() {
     const customerTemplateDefaults: Record<string, { subject: string; body: string }> = {
       'new_order': {
         subject: 'We received your BUBA Catering request #{{order_id}}!',
-        body: `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Order summary:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p>{{items_html}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`,
+        body: `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Your order:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}{{delivery_note}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`,
       },
       'order_approved': {
         subject: 'Your BUBA Catering order #{{order_id}} is confirmed!',
@@ -336,6 +336,28 @@ export async function initDb() {
           });
           console.log(`Seeded customer email template for: ${trigger}`);
         }
+      }
+    }
+
+    // Migrate new_order customer template: if it still uses old format (piece counts / raw date / total),
+    // force-update it to the simplified customer-friendly format.
+    const newOrderTemplate = await db.execute({
+      sql: "SELECT customer_body_html FROM email_templates WHERE trigger_name = 'new_order'",
+      args: [],
+    });
+    if (newOrderTemplate.rows.length > 0) {
+      const currentBody = String(newOrderTemplate.rows[0].customer_body_html ?? '');
+      const needsMigration =
+        currentBody.includes('{{total}}') ||
+        currentBody.includes('pcs</li>') ||
+        (currentBody.includes('{{fulfillment_date}}') && !currentBody.includes('{{fulfillment_date_formatted}}'));
+      if (needsMigration) {
+        const migratedBody = `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Your order:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}{{delivery_note}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'new_order'",
+          args: [migratedBody],
+        });
+        console.log('Migrated new_order customer email template to simplified format');
       }
     }
 

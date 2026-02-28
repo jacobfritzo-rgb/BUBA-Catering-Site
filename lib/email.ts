@@ -46,8 +46,21 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     <ul>${item.flavors.map(f => `<li>${f.name}: ${f.quantity} pcs</li>`).join('')}</ul>
   `).join('');
 
+  // Customer-friendly: flavor names only, no piece counts
+  const itemsHtmlSimple = order.order_data.items.map(item => `
+    <p><strong>${item.type === 'party_box' ? 'Party Box' : 'Big Box'}</strong></p>
+    <ul>${item.flavors.map(f => `<li>${f.name}</li>`).join('')}</ul>
+  `).join('');
+
   const addonsHtml = order.order_data.addons && order.order_data.addons.length > 0
     ? `<h3>Add-ons:</h3><ul>${order.order_data.addons.map(a => `<li>${a.name} x${a.quantity}</li>`).join('')}</ul>`
+    : '';
+
+  // Human-readable date: "Thursday, March 5, 2026"
+  const fulfillmentDateFormatted = fulfillmentDate
+    ? new Date(fulfillmentDate + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      })
     : '';
 
   return {
@@ -57,15 +70,21 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     customer_phone: order.customer_phone,
     fulfillment_type: order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup',
     fulfillment_date: fulfillmentDate,
+    fulfillment_date_formatted: fulfillmentDateFormatted,
     fulfillment_time: fulfillmentTime,
     delivery_address_line: order.delivery_address
       ? `<p><strong>Address:</strong> ${order.delivery_address}</p>`
       : '',
     total: `$${(order.total_price / 100).toFixed(2)}`,
     items_html: itemsHtml + addonsHtml,
+    items_html_simple: itemsHtmlSimple + addonsHtml,
     admin_url: `${baseUrl}/admin`,
     production_sheet: productionSheetHTML || '',
     rejection_reason: order.rejection_reason || '',
+    serves_count: order.order_data.serves_count ? String(order.order_data.serves_count) : '',
+    delivery_note: order.fulfillment_type === 'delivery'
+      ? '<p><em>Since you selected delivery, we\'ll reach out shortly with a quote for the delivery fee once your order is reviewed.</em></p>'
+      : '',
   };
 }
 
