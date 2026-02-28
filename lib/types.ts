@@ -97,6 +97,7 @@ export interface UpdateOrderRequest {
   metrospeedy_status?: string;
   metrospeedy_notes?: string;
   production_done?: number;
+  delivery_fee?: number;
 }
 
 export interface CreateFlavorRequest {

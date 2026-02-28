@@ -25,11 +25,12 @@ const TRIGGER_LABELS: Record<string, string> = {
   order_paid: "Paid (Kitchen)",
   order_completed: "Completed",
   production_done: "Production Done",
+  delivery_fee_confirmed: "Delivery Fee Confirmed",
   daily_schedule_foh: "FOH Schedule",
   production_alert_kitchen: "Kitchen Alert",
 };
 
-const EVENT_TRIGGERS = ["new_order", "order_approved", "order_rejected", "order_paid", "order_completed", "production_done"];
+const EVENT_TRIGGERS = ["new_order", "order_approved", "order_rejected", "order_paid", "order_completed", "production_done", "delivery_fee_confirmed"];
 const SCHEDULED_TRIGGERS = ["daily_schedule_foh", "production_alert_kitchen"];
 
 const SCHEDULED_TRIGGER_DESCRIPTIONS: Record<string, string> = {
@@ -52,6 +53,9 @@ const AVAILABLE_VARIABLES = [
   { name: "{{items_html_simple}}", desc: "Box & flavor names only, no piece counts (HTML)" },
   { name: "{{delivery_note}}", desc: "Delivery quote note (delivery orders only)" },
   { name: "{{serves_count}}", desc: "Number of people being served (if provided)" },
+  { name: "{{subtotal}}", desc: "Order subtotal excluding delivery fee (e.g. $225.00)" },
+  { name: "{{delivery_fee_display}}", desc: "Delivery fee (e.g. $55.00) or 'TBD' if not yet confirmed" },
+  { name: "{{price_estimate_note}}", desc: "Auto-generated delivery/pickup pricing note (HTML)" },
   { name: "{{admin_url}}", desc: "Link to admin dashboard" },
   { name: "{{production_sheet}}", desc: "Full kitchen production sheet (order_paid only)" },
   { name: "{{rejection_reason}}", desc: "Rejection reason (order_rejected only)" },
@@ -310,8 +314,8 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Customer-facing template (approved + rejected only) */}
-              {(currentTemplate.trigger_name === "order_approved" || currentTemplate.trigger_name === "order_rejected") && (
+              {/* Customer-facing template (for triggers that send customer emails) */}
+              {["order_approved", "order_rejected", "new_order", "delivery_fee_confirmed"].includes(currentTemplate.trigger_name) && (
                 <div className="space-y-3 border-2 border-blue-200 bg-blue-50 p-4 rounded">
                   <p className="text-xs font-black uppercase tracking-wide text-blue-700 border-b border-blue-200 pb-1">
                     Customer Email — sent to {"{{"+"customer_email"+"}}"} on this trigger

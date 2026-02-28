@@ -271,7 +271,7 @@ export default function AdminDashboard() {
           {activeTab === "orders" && (
             <OrderList orders={orders} onOrderUpdate={fetchOrders} />
           )}
-          {activeTab === "production" && <ProductionView orders={orders} />}
+          {activeTab === "production" && <ProductionView orders={orders} onUpdate={fetchOrders} />}
           {activeTab === "calendar" && <CalendarView orders={orders} />}
           {activeTab === "analytics" && <AnalyticsView orders={orders} />}
           {activeTab === "customers" && (

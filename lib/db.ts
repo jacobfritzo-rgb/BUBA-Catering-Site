@@ -258,6 +258,7 @@ export async function initDb() {
       { trigger_name: 'production_done', enabled: 1, recipients: adminEmail },
       { trigger_name: 'daily_schedule_foh', enabled: 0, recipients: '' },
       { trigger_name: 'production_alert_kitchen', enabled: 0, recipients: kitchenEmail },
+      { trigger_name: 'delivery_fee_confirmed', enabled: 1, recipients: adminEmail },
     ];
     for (const t of newTriggers) {
       await db.execute({
@@ -274,6 +275,14 @@ export async function initDb() {
         label: 'Production Marked Done',
         subject: '✅ Production Done — Order #{{order_id}} ({{customer_name}})',
         body_html: `<h2>Production Complete</h2><p>Staff has marked production as done for Order <strong>#{{order_id}}</strong>.</p><p><strong>Customer:</strong> {{customer_name}}</p><p><strong>Fulfillment:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><a href="${baseUrl2}/admin">View in Admin Dashboard</a></p>`,
+      },
+      {
+        trigger_name: 'delivery_fee_confirmed',
+        label: 'Delivery Fee Confirmed',
+        subject: '🚚 Delivery Fee Set — Order #{{order_id}} ({{customer_name}})',
+        body_html: `<h2>Delivery Fee Confirmed</h2><p>Order <strong>#{{order_id}}</strong> for <strong>{{customer_name}}</strong> — delivery fee has been set.</p><p><strong>Subtotal:</strong> {{subtotal}}</p><p><strong>Delivery Fee:</strong> {{delivery_fee_display}}</p><p><strong>New Total:</strong> {{total}}</p><p><a href="${baseUrl2}/admin">View in Admin Dashboard</a></p>`,
+        customer_subject: 'Your BUBA Catering delivery fee is confirmed — Order #{{order_id}}',
+        customer_body_html: `<p>Hi {{customer_name}},</p><p>Great news — your delivery fee has been confirmed!</p><p><strong>Order #{{order_id}}</strong> | {{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p><p>Subtotal: {{subtotal}}<br/>Delivery fee: {{delivery_fee_display}}<br/><strong>Total: {{total}}</strong></p><p>You'll receive an invoice from <strong>Toast</strong> shortly with your final total.</p><p>Thank you for choosing BUBA Catering!</p><p>— The BUBA Team</p>`,
       },
       {
         trigger_name: 'daily_schedule_foh',
@@ -320,6 +329,10 @@ export async function initDb() {
         subject: 'Regarding your BUBA Catering order #{{order_id}}',
         body: `<p>Hi {{customer_name}},</p><p>Thank you for your interest in BUBA Catering. Unfortunately, we're unable to fulfill your order at this time.</p><p>{{rejection_reason}}</p><p>We hope to serve you in the future. Please don't hesitate to reach out with any questions.</p><p>— The BUBA Team</p>`,
       },
+      'delivery_fee_confirmed': {
+        subject: 'Your BUBA Catering delivery fee is confirmed — Order #{{order_id}}',
+        body: `<p>Hi {{customer_name}},</p><p>Great news — your delivery fee has been confirmed!</p><p><strong>Order #{{order_id}}</strong> | {{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p><p>Subtotal: {{subtotal}}<br/>Delivery fee: {{delivery_fee_display}}<br/><strong>Total: {{total}}</strong></p><p>You'll receive an invoice from <strong>Toast</strong> shortly with your final total.</p><p>Thank you for choosing BUBA Catering!</p><p>— The BUBA Team</p>`,
+      },
     };
     for (const [trigger, defaults] of Object.entries(customerTemplateDefaults)) {
       const existing = await db.execute({
@@ -350,9 +363,11 @@ export async function initDb() {
       const needsMigration =
         currentBody.includes('{{total}}') ||
         currentBody.includes('pcs</li>') ||
-        (currentBody.includes('{{fulfillment_date}}') && !currentBody.includes('{{fulfillment_date_formatted}}'));
+        (currentBody.includes('{{fulfillment_date}}') && !currentBody.includes('{{fulfillment_date_formatted}}')) ||
+        !currentBody.includes('{{subtotal}}') ||
+        !currentBody.includes('{{price_estimate_note}}');
       if (needsMigration) {
-        const migratedBody = `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Your order:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}{{delivery_note}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`;
+        const migratedBody = `<p>Hi {{customer_name}},</p><p>Thanks for submitting your catering request! We've received your order and will review it shortly.</p><p><strong>Your order:</strong></p><p>{{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}<p><strong>Estimated subtotal:</strong> {{subtotal}}</p>{{price_estimate_note}}{{delivery_note}}<p>We'll be in touch once your order has been reviewed. If you have any questions in the meantime, feel free to reach out.</p><p>— The BUBA Team</p>`;
         await db.execute({
           sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'new_order'",
           args: [migratedBody],

@@ -6,99 +6,63 @@ interface PortionCalculatorProps {
   onAddToOrder?: (partyBoxes: number, bigBoxes: number) => void;
 }
 
-interface Recommendation {
-  label: string;
-  partyBoxes: number;
-  bigBoxes: number;
-  cost: number;
+// Prices
+const PARTY_BOX_PRICE = 225;
+const BIG_BOX_PRICE = 78;
+
+// Servings per box per mode
+const PB_SERVINGS = { main: 10, side: 15 };
+const BB_SERVINGS = { main: 4, side: 8 };
+
+type Mode = "main" | "side";
+
+interface BoxRec {
+  partyQty: number;
+  bigQty: number;
+}
+
+function buildRec(n: number, mode: Mode): { recommended: BoxRec; alternate: BoxRec | null } {
+  const nEff = mode === "main" ? Math.ceil(n * 1.1) : n;
+  const partyQty = Math.ceil(nEff / PB_SERVINGS[mode]);
+  const bigQty = Math.ceil(nEff / BB_SERVINGS[mode]);
+
+  if (n >= 41) {
+    return { recommended: { partyQty, bigQty: 0 }, alternate: null };
+  } else if (n >= 13) {
+    return {
+      recommended: { partyQty, bigQty: 0 },
+      alternate: { partyQty: 0, bigQty },
+    };
+  } else {
+    return {
+      recommended: { partyQty: 0, bigQty },
+      alternate: { partyQty, bigQty: 0 },
+    };
+  }
+}
+
+function recLabel(rec: BoxRec): string {
+  if (rec.partyQty > 0) return `${rec.partyQty} Party Box${rec.partyQty > 1 ? "es" : ""}`;
+  return `${rec.bigQty} Big Box${rec.bigQty > 1 ? "es" : ""}`;
+}
+
+function recCost(rec: BoxRec): number {
+  return rec.partyQty * PARTY_BOX_PRICE + rec.bigQty * BIG_BOX_PRICE;
 }
 
 export default function PortionCalculator({ onAddToOrder }: PortionCalculatorProps) {
   const [people, setPeople] = useState<number>(10);
-  const [isMainEvent, setIsMainEvent] = useState<boolean>(true);
+  const [mode, setMode] = useState<Mode>("main");
   const [showResults, setShowResults] = useState(false);
-  const [addedOption, setAddedOption] = useState<"A" | "B" | null>(null);
+  const [added, setAdded] = useState<"recommended" | "alternate" | null>(null);
 
-  const calculate = () => {
-    setShowResults(true);
-    setAddedOption(null);
-  };
+  const { recommended, alternate } = buildRec(people, mode);
 
-  // ─── Algorithm ───────────────────────────────────────────────────────────────
-  // Two-track recommendations, never more than 4 big boxes in any single recommendation.
-  //
-  // Main course: 2 pcs/person for all-big-box option, 3 pcs/person for party box option
-  // Side dish: 1.5 pcs/person — big boxes only if ≤2 needed, else party box
-  //
-  // Verified against owner's examples:
-  //   10 main → 3 big boxes OR 1 party box
-  //   15 main → 4 big boxes OR 1 party box + 1 big box
-  //   10 side → 2 big boxes
-  //   15 side → 1 party box
-
-  let optionA: Recommendation | null = null; // Big boxes only (main course ≤4 big boxes)
-  let optionB: Recommendation | null = null; // Party box route (main course)
-  let singleRec: Recommendation | null = null; // Single recommendation (side dish, or main when rawBig > 4)
-
-  if (isMainEvent) {
-    const rawBigBoxes = Math.ceil((people * 2) / 8);
-
-    // Party box calculation: 3 pcs/person
-    const partyPieces = people * 3;
-    let partyBoxCount = Math.max(1, Math.floor(partyPieces / 40));
-    let remainder = Math.max(0, partyPieces - partyBoxCount * 40);
-    let extraBig = remainder > 0 ? Math.ceil(remainder / 8) : 0;
-
-    // If extra big boxes exceed 4, round up to another party box
-    if (extraBig > 4) {
-      partyBoxCount = Math.ceil(partyPieces / 40);
-      remainder = Math.max(0, partyPieces - partyBoxCount * 40);
-      extraBig = remainder > 0 ? Math.ceil(remainder / 8) : 0;
-    }
-
-    const partyLabel =
-      extraBig > 0
-        ? `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""} + ${extraBig} Big Box${extraBig > 1 ? "es" : ""}`
-        : `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""}`;
-    const partyCost = partyBoxCount * 225 + extraBig * 78;
-
-    if (rawBigBoxes <= 4) {
-      // Show both options side by side
-      const bigLabel = `${rawBigBoxes} Big Box${rawBigBoxes > 1 ? "es" : ""}`;
-      optionA = { label: bigLabel, partyBoxes: 0, bigBoxes: rawBigBoxes, cost: rawBigBoxes * 78 };
-      optionB = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: extraBig, cost: partyCost };
-    } else {
-      // rawBig > 4: only recommend the party box route
-      singleRec = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: extraBig, cost: partyCost };
-    }
-  } else {
-    // Side dish: 1.5 pcs/person
-    const rawBigBoxes = Math.ceil((people * 1.5) / 8);
-
-    if (rawBigBoxes <= 2) {
-      const bigLabel = `${rawBigBoxes} Big Box${rawBigBoxes > 1 ? "es" : ""}`;
-      singleRec = { label: bigLabel, partyBoxes: 0, bigBoxes: rawBigBoxes, cost: rawBigBoxes * 78 };
-    } else {
-      const partyBoxCount = Math.ceil((people * 1.5) / 40);
-      const partyLabel = `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""}`;
-      singleRec = { label: partyLabel, partyBoxes: partyBoxCount, bigBoxes: 0, cost: partyBoxCount * 225 };
-    }
-  }
-
-  const handleAdd = (option: "A" | "B") => {
+  const handleAdd = (rec: BoxRec, which: "recommended" | "alternate") => {
     if (!onAddToOrder) return;
-    const rec = option === "A" ? optionA : optionB;
-    if (!rec) return;
-    onAddToOrder(rec.partyBoxes, rec.bigBoxes);
-    setAddedOption(option);
-    setTimeout(() => setAddedOption(null), 2500);
-  };
-
-  const handleAddSingle = () => {
-    if (!onAddToOrder || !singleRec) return;
-    onAddToOrder(singleRec.partyBoxes, singleRec.bigBoxes);
-    setAddedOption("A");
-    setTimeout(() => setAddedOption(null), 2500);
+    onAddToOrder(rec.partyQty, rec.bigQty);
+    setAdded(which);
+    setTimeout(() => setAdded(null), 2500);
   };
 
   return (
@@ -121,11 +85,11 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
               <input
                 type="number"
                 min="1"
-                max="200"
+                max="500"
                 value={people}
                 onChange={(e) => {
                   setShowResults(false);
-                  setPeople(parseInt(e.target.value) || 1);
+                  setPeople(Math.max(1, parseInt(e.target.value) || 1));
                 }}
                 className="w-full px-4 py-3 border-4 border-black font-black text-2xl text-center"
               />
@@ -139,9 +103,9 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => { setIsMainEvent(true); setShowResults(false); }}
+                  onClick={() => { setMode("main"); setShowResults(false); }}
                   className={`p-4 border-4 font-black uppercase transition-colors ${
-                    isMainEvent
+                    mode === "main"
                       ? "border-[#E10600] bg-[#E10600] text-white"
                       : "border-black bg-white text-black hover:border-[#E10600]"
                   }`}
@@ -150,9 +114,9 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setIsMainEvent(false); setShowResults(false); }}
+                  onClick={() => { setMode("side"); setShowResults(false); }}
                   className={`p-4 border-4 font-black uppercase transition-colors ${
-                    !isMainEvent
+                    mode === "side"
                       ? "border-[#E10600] bg-[#E10600] text-white"
                       : "border-black bg-white text-black hover:border-[#E10600]"
                   }`}
@@ -164,7 +128,7 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
 
             {/* Calculate button */}
             <button
-              onClick={calculate}
+              onClick={() => setShowResults(true)}
               className="w-full bg-[#E10600] hover:bg-black text-white font-black py-4 px-6 uppercase tracking-tight border-4 border-black transition-colors text-xl"
             >
               Calculate Portions
@@ -172,75 +136,52 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
 
             {/* Results */}
             {showResults && (
-              <div className="border-t-4 border-black pt-6 mt-6">
-                <h4 className="font-black uppercase text-lg mb-4">Recommended Order:</h4>
+              <div className="border-t-4 border-black pt-6 mt-6 space-y-4">
+                <h4 className="font-black uppercase text-lg">Recommended Order:</h4>
 
-                {/* Two options: main course with rawBig ≤ 4 */}
-                {optionA && optionB && (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 border-2 border-black">
-                      <p className="font-black uppercase text-sm mb-2">Option 1: Big Boxes</p>
-                      <p className="text-2xl font-black text-[#E10600] mb-1">{optionA.label}</p>
-                      <p className="text-sm font-medium mb-3">Total: ${optionA.cost}</p>
-                      {onAddToOrder && (
-                        <button
-                          type="button"
-                          onClick={() => handleAdd("A")}
-                          className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
-                            addedOption === "A"
-                              ? "bg-green-600 border-green-600 text-white"
-                              : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
-                          }`}
-                        >
-                          {addedOption === "A" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD OPTION 1 TO MY ORDER →"}
-                        </button>
-                      )}
-                    </div>
+                {/* Recommended */}
+                <div className="bg-gray-50 p-4 border-2 border-black">
+                  <p className="font-black uppercase text-xs mb-2 text-[#E10600]">Recommended</p>
+                  <p className="text-2xl font-black text-[#E10600] mb-1">{recLabel(recommended)}</p>
+                  <p className="text-sm font-medium mb-3">Estimated total: ${recCost(recommended)}</p>
+                  {onAddToOrder && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdd(recommended, "recommended")}
+                      className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
+                        added === "recommended"
+                          ? "bg-green-600 border-green-600 text-white"
+                          : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
+                      }`}
+                    >
+                      {added === "recommended" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD TO MY ORDER →"}
+                    </button>
+                  )}
+                </div>
 
-                    <div className="bg-gray-50 p-4 border-2 border-black">
-                      <p className="font-black uppercase text-sm mb-2">Option 2: Party Box</p>
-                      <p className="text-2xl font-black text-[#E10600] mb-1">{optionB.label}</p>
-                      <p className="text-sm font-medium mb-3">Total: ${optionB.cost}</p>
-                      {onAddToOrder && (
-                        <button
-                          type="button"
-                          onClick={() => handleAdd("B")}
-                          className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
-                            addedOption === "B"
-                              ? "bg-green-600 border-green-600 text-white"
-                              : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
-                          }`}
-                        >
-                          {addedOption === "B" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD OPTION 2 TO MY ORDER →"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Single recommendation: side dish or main when rawBig > 4 */}
-                {singleRec && (
-                  <div className="bg-gray-50 p-4 border-2 border-black">
-                    <p className="font-black uppercase text-sm mb-2">Recommended:</p>
-                    <p className="text-2xl font-black text-[#E10600] mb-1">{singleRec.label}</p>
-                    <p className="text-sm font-medium mb-3">Total: ${singleRec.cost}</p>
+                {/* Alternate (if applicable) */}
+                {alternate && (
+                  <div className="bg-gray-50 p-4 border-2 border-gray-300">
+                    <p className="font-black uppercase text-xs mb-2 text-gray-500">Alternative Option</p>
+                    <p className="text-2xl font-black text-gray-700 mb-1">{recLabel(alternate)}</p>
+                    <p className="text-sm font-medium mb-3">Estimated total: ${recCost(alternate)}</p>
                     {onAddToOrder && (
                       <button
                         type="button"
-                        onClick={handleAddSingle}
+                        onClick={() => handleAdd(alternate, "alternate")}
                         className={`w-full py-2 px-4 font-black uppercase text-sm border-2 transition-colors ${
-                          addedOption === "A"
+                          added === "alternate"
                             ? "bg-green-600 border-green-600 text-white"
                             : "bg-black border-black text-white hover:bg-[#E10600] hover:border-[#E10600]"
                         }`}
                       >
-                        {addedOption === "A" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD TO MY ORDER →"}
+                        {added === "alternate" ? "✓ ADDED! SCROLL DOWN TO CONTINUE" : "ADD THIS INSTEAD →"}
                       </button>
                     )}
                   </div>
                 )}
 
-                <p className="text-xs text-gray-600 mt-4 italic">
+                <p className="text-xs text-gray-500 italic">
                   * These are estimates. Adjust based on your guests&apos; appetites!
                 </p>
               </div>

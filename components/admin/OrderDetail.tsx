@@ -74,6 +74,10 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   const [feeCalcSetup, setFeeCalcSetup] = useState(false);
   const [feeCalcWaitMins, setFeeCalcWaitMins] = useState(0);
 
+  // Delivery fee confirm state
+  const [isConfirmingFee, setIsConfirmingFee] = useState(false);
+  const [feeConfirmMsg, setFeeConfirmMsg] = useState("");
+
   // Production done state
   const [isMarkingProduction, setIsMarkingProduction] = useState(false);
   const [productionMsg, setProductionMsg] = useState("");
@@ -186,6 +190,29 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
       // silently fail
     } finally {
       setIsAddingNote(false);
+    }
+  };
+
+  const confirmDeliveryFee = async (feeDollars: number) => {
+    setIsConfirmingFee(true);
+    setFeeConfirmMsg("");
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delivery_fee: Math.round(feeDollars * 100) }),
+      });
+      if (res.ok) {
+        onUpdate();
+        setFeeConfirmMsg(`Confirmed! Fee set to $${feeDollars.toFixed(2)}. Customer notified.`);
+      } else {
+        setFeeConfirmMsg("Failed to confirm fee.");
+      }
+    } catch {
+      setFeeConfirmMsg("Error confirming fee.");
+    } finally {
+      setIsConfirmingFee(false);
+      setTimeout(() => setFeeConfirmMsg(""), 5000);
     }
   };
 
@@ -577,6 +604,28 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                       <span>ESTIMATED TOTAL:</span>
                       <span>${feeTotalFee.toFixed(2)}</span>
                     </div>
+                  </div>
+
+                  {/* Confirm button */}
+                  <div className="pt-2 border-t border-orange-200">
+                    {order.delivery_fee > 0 && (
+                      <p className="text-xs text-orange-700 mb-1.5">
+                        Current confirmed fee: <strong>${(order.delivery_fee / 100).toFixed(2)}</strong>
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => confirmDeliveryFee(feeTotalFee)}
+                      disabled={isConfirmingFee}
+                      className="w-full bg-orange-700 hover:bg-orange-800 text-white font-black text-sm py-2 px-3 uppercase tracking-wide border-2 border-orange-700 disabled:opacity-50 transition-colors"
+                    >
+                      {isConfirmingFee ? "Confirming..." : `✓ Confirm $${feeTotalFee.toFixed(2)} Delivery Fee`}
+                    </button>
+                    {feeConfirmMsg && (
+                      <p className={`text-xs mt-1.5 font-medium ${feeConfirmMsg.includes("Failed") || feeConfirmMsg.includes("Error") ? "text-red-600" : "text-green-700"}`}>
+                        {feeConfirmMsg}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

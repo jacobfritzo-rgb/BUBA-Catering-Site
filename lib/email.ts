@@ -10,22 +10,34 @@ const resend = process.env.RESEND_API_KEY
 const PRIMARY_FROM = process.env.RESEND_FROM_EMAIL || 'BUBA Catering <orders@send.bubabureka.com>';
 const FALLBACK_FROM = 'BUBA Catering <onboarding@resend.dev>';
 
+interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
 // Low-level send function — falls back to onboarding@resend.dev if custom domain is not yet verified
-async function sendEmail(to: string[], subject: string, html: string) {
+async function sendEmail(
+  to: string[],
+  subject: string,
+  html: string,
+  attachments?: EmailAttachment[]
+) {
   if (!resend) {
     console.error('RESEND_API_KEY not set — email skipped');
     return;
   }
+  const payload: Record<string, unknown> = { from: PRIMARY_FROM, to, subject, html };
+  if (attachments && attachments.length > 0) payload.attachments = attachments;
   try {
-    const result = await resend.emails.send({ from: PRIMARY_FROM, to, subject, html });
+    const result = await resend.emails.send(payload as any);
     console.log(`Email sent from ${PRIMARY_FROM} to ${to.join(', ')} — id: ${(result as any)?.data?.id || 'ok'}`);
   } catch (primaryErr: unknown) {
     const msg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
     console.error(`Email failed from ${PRIMARY_FROM}: ${msg}`);
-    if (PRIMARY_FROM === FALLBACK_FROM) throw primaryErr; // avoid infinite loop
+    if (PRIMARY_FROM === FALLBACK_FROM) throw primaryErr;
     console.log(`Retrying with fallback from: ${FALLBACK_FROM}`);
     try {
-      const result = await resend.emails.send({ from: FALLBACK_FROM, to, subject, html });
+      const result = await resend.emails.send({ from: FALLBACK_FROM, to, subject, html } as any);
       console.log(`Fallback email sent to ${to.join(', ')} — id: ${(result as any)?.data?.id || 'ok'}`);
     } catch (fallbackErr: unknown) {
       const msg2 = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
@@ -63,6 +75,18 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
       })
     : '';
 
+  const deliveryFeeCents = order.delivery_fee || 0;
+  const subtotalCents = order.total_price - deliveryFeeCents;
+  const subtotalFormatted = `$${(subtotalCents / 100).toFixed(2)}`;
+  const deliveryFeeDisplay = deliveryFeeCents > 0
+    ? `$${(deliveryFeeCents / 100).toFixed(2)}`
+    : 'TBD';
+  const priceEstimateNote = order.fulfillment_type === 'delivery'
+    ? deliveryFeeCents > 0
+      ? '<p><em>Your delivery fee has been confirmed and is included in the total above.</em></p>'
+      : '<p><em>Note: The delivery fee will be confirmed separately and is not included in the estimated subtotal above.</em></p>'
+    : '<p><em>Note: This is an estimated total. Final pricing will be confirmed when we review your order.</em></p>';
+
   return {
     order_id: String(order.id),
     customer_name: order.customer_name,
@@ -76,6 +100,9 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
       ? `<p><strong>Address:</strong> ${order.delivery_address}</p>`
       : '',
     total: `$${(order.total_price / 100).toFixed(2)}`,
+    subtotal: subtotalFormatted,
+    delivery_fee_display: deliveryFeeDisplay,
+    price_estimate_note: priceEstimateNote,
     items_html: itemsHtml + addonsHtml,
     items_html_simple: itemsHtmlSimple + addonsHtml,
     admin_url: `${baseUrl}/admin`,
@@ -148,9 +175,16 @@ export async function sendNotification(
     const subject = substitute(template.subject as string, vars);
     const html = substitute(template.body_html as string, vars);
 
+    // For order_paid, attach a print-ready kitchen sheet as an HTML file
+    let attachments: EmailAttachment[] | undefined;
+    if (triggerName === 'order_paid') {
+      const printHTML = generateKitchenPrintHTML(order);
+      attachments = [{ filename: `order-${order.id}-kitchen-sheet.html`, content: Buffer.from(printHTML) }];
+    }
+
     // Send admin/internal notification (failure here must NOT block customer email)
     try {
-      await sendEmail(recipients, subject, html);
+      await sendEmail(recipients, subject, html, attachments);
       console.log(`Admin notification sent for trigger: ${triggerName}, order: #${order.id}`);
     } catch (adminErr) {
       console.error(`Admin email failed for trigger ${triggerName}:`, adminErr);
@@ -276,11 +310,15 @@ export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
 
   orders.forEach(order => {
     order.order_data.items.forEach(item => {
-      if (item.type === 'party_box') partyBoxes += item.quantity;
-      else bigBoxes += item.quantity;
-      item.flavors.forEach(f => {
-        flavorTotals[f.name] = (flavorTotals[f.name] || 0) + f.quantity;
-      });
+      if (item.type === 'party_box') {
+        partyBoxes += item.quantity;
+        item.flavors.forEach(f => {
+          flavorTotals[f.name] = (flavorTotals[f.name] || 0) + f.quantity;
+        });
+      } else {
+        bigBoxes += item.quantity;
+        // Big boxes use in-store stock — no production flavors to count
+      }
     });
   });
 
@@ -295,13 +333,13 @@ export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
     html += `<div style="padding: 15px 20px; background: #f0f0f0; border-bottom: 3px solid #000;">`;
     html += `<h2 style="margin: 0 0 10px 0; font-size: 16px; text-transform: uppercase;">PRODUCTION SUMMARY</h2>`;
     html += `<table style="font-size: 14px; width: 100%;"><tr>`;
-    html += `<td style="font-weight: bold;">Party Boxes: ${partyBoxes} (${partyBoxes * 40} pieces)</td>`;
-    html += `<td style="font-weight: bold;">Big Boxes: ${bigBoxes} (${bigBoxes * 8} pieces)</td>`;
+    html += `<td style="font-weight: bold;">Party Boxes: ${partyBoxes} (${partyBoxes * 40} pieces to produce)</td>`;
+    html += `<td style="font-weight: bold;">Big Boxes: ${bigBoxes} (in-store stock — no production needed)</td>`;
     html += `</tr></table></div>`;
 
     // Flavor breakdown
     html += `<div style="padding: 15px 20px;">`;
-    html += `<h2 style="font-size: 15px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">FLAVORS TO PRODUCE</h2>`;
+    html += `<h2 style="font-size: 15px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">FLAVORS TO PRODUCE (Party Boxes Only)</h2>`;
     html += `<table style="width: 100%; border-collapse: collapse; font-size: 15px;">`;
     Object.entries(flavorTotals)
       .sort((a, b) => b[1] - a[1])
@@ -323,10 +361,16 @@ export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
       html += `<span>${order.fulfillment_type === 'delivery' ? '📦 Delivery' : '🏪 Pickup'} ${time}</span>`;
       html += `</div>`;
       order.order_data.items.forEach(item => {
-        html += `<div style="margin-left: 10px; border-left: 3px solid #E10600; padding-left: 8px; margin-bottom: 8px;">`;
-        html += `<strong>${item.type === 'party_box' ? 'PARTY BOX' : 'BIG BOX'} x${item.quantity}</strong><br/>`;
-        item.flavors.forEach(f => { html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`; });
-        html += `</div>`;
+        if (item.type === 'party_box') {
+          html += `<div style="margin-left: 10px; border-left: 3px solid #E10600; padding-left: 8px; margin-bottom: 8px;">`;
+          html += `<strong>PARTY BOX x${item.quantity}</strong><br/>`;
+          item.flavors.forEach(f => { html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`; });
+          html += `</div>`;
+        } else {
+          html += `<div style="margin-left: 10px; border-left: 3px solid #aaa; padding-left: 8px; margin-bottom: 8px; color: #555;">`;
+          html += `<strong>BIG BOX x${item.quantity}</strong> — use in-store stock (no production needed)`;
+          html += `</div>`;
+        }
       });
       html += `</div>`;
     });
@@ -372,11 +416,15 @@ export function generateProductionSheetHTML(orders: Order[]): string {
 
     dayOrders.forEach(order => {
       order.order_data.items.forEach(item => {
-        if (item.type === 'party_box') partyBoxes++;
-        else bigBoxes++;
-        item.flavors.forEach(flavor => {
-          flavorTotals[flavor.name] = (flavorTotals[flavor.name] || 0) + flavor.quantity;
-        });
+        if (item.type === 'party_box') {
+          partyBoxes += item.quantity;
+          item.flavors.forEach(flavor => {
+            flavorTotals[flavor.name] = (flavorTotals[flavor.name] || 0) + flavor.quantity;
+          });
+        } else {
+          bigBoxes += item.quantity;
+          // Big boxes use in-store stock — exclude from production flavor totals
+        }
       });
       order.order_data.addons?.forEach(addon => {
         addonTotals[addon.name] = (addonTotals[addon.name] || 0) + addon.quantity;
@@ -385,10 +433,10 @@ export function generateProductionSheetHTML(orders: Order[]): string {
 
     html += `<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; background: #f0f0f0; padding: 15px;">`;
     html += `<div><strong>Party Boxes:</strong> ${partyBoxes} (${partyBoxes * 40} pcs)</div>`;
-    html += `<div><strong>Big Boxes:</strong> ${bigBoxes} (${bigBoxes * 8} pcs)</div>`;
+    html += `<div><strong>Big Boxes:</strong> ${bigBoxes} (${bigBoxes * 4} burekas — in-store stock)</div>`;
     html += `</div>`;
 
-    html += '<h3 style="border-bottom: 2px solid black;">FLAVOR PRODUCTION LIST:</h3>';
+    html += '<h3 style="border-bottom: 2px solid black;">PARTY BOX FLAVOR PRODUCTION LIST:</h3>';
     html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
     Object.entries(flavorTotals).sort((a, b) => b[1] - a[1]).forEach(([name, qty]) => {
       html += `<tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px; font-weight: bold;">${name}</td><td style="padding: 8px; text-align: right; font-size: 18px;"><strong>${qty} pieces</strong></td></tr>`;
@@ -423,12 +471,18 @@ export function generateProductionSheetHTML(orders: Order[]): string {
       }
 
       order.order_data.items.forEach(item => {
-        html += `<div style="margin-left: 15px; border-left: 4px solid #007bff; padding-left: 10px; margin-bottom: 10px;">`;
-        html += `<strong>${item.type === 'party_box' ? 'PARTY BOX' : 'BIG BOX'}</strong><br/>`;
-        item.flavors.forEach(f => {
-          html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`;
-        });
-        html += `</div>`;
+        if (item.type === 'party_box') {
+          html += `<div style="margin-left: 15px; border-left: 4px solid #007bff; padding-left: 10px; margin-bottom: 10px;">`;
+          html += `<strong>PARTY BOX x${item.quantity}</strong><br/>`;
+          item.flavors.forEach(f => {
+            html += `&nbsp;&nbsp;• ${f.name}: ${f.quantity} pcs<br/>`;
+          });
+          html += `</div>`;
+        } else {
+          html += `<div style="margin-left: 15px; border-left: 4px solid #aaa; padding-left: 10px; margin-bottom: 10px; color: #555;">`;
+          html += `<strong>BIG BOX x${item.quantity}</strong> — use in-store stock (no production needed)`;
+          html += `</div>`;
+        }
       });
 
       if (order.order_data.addons && order.order_data.addons.length > 0) {
@@ -447,4 +501,71 @@ export function generateProductionSheetHTML(orders: Order[]): string {
 
   html += '</div>';
   return html;
+}
+
+// Standalone print-ready HTML for a single order — used as email attachment for kitchen
+export function generateKitchenPrintHTML(order: Order): string {
+  const fulfillmentDate = getFulfillmentDate(order);
+  const dateObj = fulfillmentDate ? new Date(fulfillmentDate + 'T00:00:00') : null;
+  const dateLabel = dateObj
+    ? dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : '';
+  const time = order.fulfillment_type === 'delivery'
+    ? `${order.delivery_window_start}–${order.delivery_window_end}`
+    : order.pickup_time;
+
+  const itemsHTML = order.order_data.items.map(item => {
+    if (item.type === 'party_box') {
+      const flavors = item.flavors.map(f =>
+        `<div style="padding: 3px 0 3px 16px;">&bull; ${f.name}: <strong>${f.quantity} pcs</strong></div>`
+      ).join('');
+      return `<div style="margin-bottom: 14px;"><div style="font-weight: bold; font-size: 15px;">PARTY BOX &times;${item.quantity}</div>${flavors}</div>`;
+    } else {
+      return `<div style="margin-bottom: 14px;"><div style="font-weight: bold; font-size: 15px;">BIG BOX &times;${item.quantity}</div><div style="padding-left: 16px; color: #555; font-style: italic;">Use in-store stock (no production needed)</div></div>`;
+    }
+  }).join('');
+
+  const addonsHTML = order.order_data.addons && order.order_data.addons.length > 0
+    ? `<div style="margin-top: 12px; border-top: 1px solid #ddd; padding-top: 12px;"><div style="font-weight: bold; font-size: 15px; margin-bottom: 6px;">ADD-ONS</div>${order.order_data.addons.map(a => `<div style="padding: 3px 0 3px 16px;">&bull; ${a.name} &times;${a.quantity}</div>`).join('')}</div>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Order #${order.id} — Kitchen Sheet</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; font-size: 14px; background: #fff; color: #000; padding: 20px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 20px; background: #111; color: #fff; padding: 12px 16px; }
+  .bar { background: #E10600; color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; margin-bottom: 20px; }
+  .section { border: 2px solid #000; margin-bottom: 16px; }
+  .section-head { background: #f0f0f0; border-bottom: 2px solid #000; padding: 7px 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .section-body { padding: 12px; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; }
+  .row:last-child { border-bottom: none; }
+  @media print { body { padding: 10px; } }
+</style>
+</head><body>
+<h1>BUBA Catering — Kitchen Sheet</h1>
+<div class="bar">Order #${order.id} &nbsp;|&nbsp; ${order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup'} &nbsp;|&nbsp; ${dateLabel}</div>
+
+<div class="section">
+  <div class="section-head">Customer &amp; Fulfillment</div>
+  <div class="section-body">
+    <div class="row"><span>Customer:</span><strong>${order.customer_name}</strong></div>
+    <div class="row"><span>Phone:</span><span>${order.customer_phone}</span></div>
+    <div class="row"><span>Type:</span><span>${order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup'}</span></div>
+    <div class="row"><span>Time:</span><strong>${time}</strong></div>
+    ${order.fulfillment_type === 'delivery' ? `<div class="row"><span>Address:</span><span>${order.delivery_address || '—'}</span></div>` : ''}
+    ${order.delivery_notes ? `<div class="row"><span>Notes:</span><span>${order.delivery_notes}</span></div>` : ''}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-head">What to Prepare</div>
+  <div class="section-body">
+    ${itemsHTML}${addonsHTML}
+  </div>
+</div>
+</body></html>`;
 }

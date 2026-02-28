@@ -152,9 +152,12 @@ export default function PrintProductionSheet() {
               // Build "what to make" string
               const items: string[] = [];
               order.order_data.items.forEach(item => {
-                const boxType = item.type === 'party_box' ? 'Party Box' : 'Big Box';
-                const flavors = item.flavors.map(f => `${f.name} (${f.quantity})`).join(', ');
-                items.push(`${boxType}: ${flavors}`);
+                if (item.type === 'party_box') {
+                  const flavors = item.flavors.map(f => `${f.name} (${f.quantity})`).join(', ');
+                  items.push(`Party Box ×${item.quantity}: ${flavors}`);
+                } else {
+                  items.push(`Big Box ×${item.quantity}: in-store stock`);
+                }
               });
 
               if (order.order_data.addons && order.order_data.addons.length > 0) {

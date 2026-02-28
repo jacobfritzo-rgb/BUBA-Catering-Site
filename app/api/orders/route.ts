@@ -30,8 +30,10 @@ function calculateProductionDeadline(orderDate: string): string {
   return date.toISOString().split('T')[0];
 }
 
-// Helper to calculate bake deadline (order_date + window_start - 45 minutes)
-function calculateBakeDeadline(orderDate: string, windowStart: string): string {
+// Helper to calculate bake deadline
+// Delivery: 90 minutes (1.5 hours) before MetroSpeedy pickup window start
+// Pickup: 45 minutes before pickup time
+function calculateBakeDeadline(orderDate: string, windowStart: string, offsetMinutes: number): string {
   const [year, month, day] = orderDate.split('-').map(Number);
   const date = new Date(year, month - 1, day);
 
@@ -54,7 +56,7 @@ function calculateBakeDeadline(orderDate: string, windowStart: string): string {
   }
 
   date.setHours(hours, minutes, 0, 0);
-  date.setMinutes(date.getMinutes() - 45);
+  date.setMinutes(date.getMinutes() - offsetMinutes);
   return date.toISOString();
 }
 
@@ -164,7 +166,9 @@ export async function POST(request: NextRequest) {
     // Calculate deadlines
     const windowStart = body.fulfillment_type === "pickup" ? body.pickup_time! : body.delivery_window_start!;
     const productionDeadline = calculateProductionDeadline(orderDate);
-    const bakeDeadline = calculateBakeDeadline(orderDate, windowStart);
+    // Delivery: 90 min before MetroSpeedy pickup; Pickup: 45 min before customer arrival
+    const bakeOffsetMinutes = body.fulfillment_type === "delivery" ? 90 : 45;
+    const bakeDeadline = calculateBakeDeadline(orderDate, windowStart, bakeOffsetMinutes);
 
     // Insert order
     const result = await db.execute({
