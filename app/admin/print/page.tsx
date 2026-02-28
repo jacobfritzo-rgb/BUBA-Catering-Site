@@ -17,6 +17,7 @@ interface Order {
   order_data: {
     items: Array<{
       type: string;
+      quantity: number;
       flavors: Array<{ name: string; quantity: number }>;
     }>;
     addons?: Array<{ name: string; quantity: number }>;
