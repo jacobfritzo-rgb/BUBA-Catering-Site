@@ -98,6 +98,19 @@ export interface UpdateOrderRequest {
   metrospeedy_notes?: string;
   production_done?: number;
   delivery_fee?: number;
+  // Full-edit fields (present → triggers full order edit branch)
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  fulfillment_type?: "pickup" | "delivery";
+  pickup_date?: string;
+  pickup_time?: string;
+  delivery_date?: string;
+  delivery_window_start?: string;
+  delivery_window_end?: string;
+  delivery_address?: string;
+  delivery_notes?: string;
+  order_data?: OrderData;
 }
 
 export interface CreateFlavorRequest {

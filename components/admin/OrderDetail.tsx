@@ -1,7 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Order, OrderNote } from "@/lib/types";
+import { Order, OrderNote, OrderItem } from "@/lib/types";
+import { getMinOrderDate } from "@/lib/utils";
+
+// Generate time slots 10:00–19:00 in 30-min increments (same as OrderForm)
+const TIME_SLOTS: string[] = [];
+for (let hour = 10; hour < 19; hour++) {
+  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:00`);
+  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:30`);
+}
+TIME_SLOTS.push("19:00");
+
+interface EditBox {
+  id: string;
+  type: "party_box" | "big_box";
+  selectedFlavors: string[];
+}
+
+interface EditAddon {
+  name: string;
+  quantity: number;
+  price_cents: number;
+}
 
 interface OrderDetailProps {
   order: Order;
@@ -89,8 +110,29 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
 
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [availableFlavors, setAvailableFlavors] = useState<{ name: string; description: string }[]>([]);
+
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editFulfillmentType, setEditFulfillmentType] = useState<"pickup" | "delivery">("pickup");
+  const [editDate, setEditDate] = useState("");
+  const [editTimeStart, setEditTimeStart] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editBoxes, setEditBoxes] = useState<EditBox[]>([]);
+  const [editAddons, setEditAddons] = useState<EditAddon[]>([]);
+
   useEffect(() => {
     fetchNotes();
+    fetch("/api/flavors")
+      .then((r) => r.json())
+      .then((data) => setAvailableFlavors(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, [order.id]);
 
   const fetchNotes = async () => {
@@ -104,6 +146,130 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
       // silently fail
     } finally {
       setNotesLoading(false);
+    }
+  };
+
+  const enterEditMode = () => {
+    setEditName(order.customer_name);
+    setEditEmail(order.customer_email);
+    setEditPhone(order.customer_phone);
+    setEditFulfillmentType(order.fulfillment_type);
+    setEditDate(
+      order.fulfillment_type === "delivery"
+        ? (order.delivery_date || "")
+        : (order.pickup_date || "")
+    );
+    setEditTimeStart(
+      order.fulfillment_type === "delivery"
+        ? (order.delivery_window_start || "10:00")
+        : (order.pickup_time || "10:00")
+    );
+    setEditAddress(order.delivery_address || "");
+    setEditNotes(order.delivery_notes || "");
+
+    // Expand items (each quantity unit → one EditBox)
+    const boxes: EditBox[] = [];
+    for (const item of order.order_data.items) {
+      for (let i = 0; i < item.quantity; i++) {
+        boxes.push({
+          id: `box-${Date.now()}-${boxes.length}`,
+          type: item.type,
+          selectedFlavors: item.flavors.map((f) => f.name),
+        });
+      }
+    }
+    setEditBoxes(boxes);
+
+    // Expand addons
+    setEditAddons(
+      (order.order_data.addons || []).map((a) => ({
+        name: a.name,
+        quantity: a.quantity,
+        price_cents: a.price_cents,
+      }))
+    );
+
+    setEditError(null);
+    setEditMode(true);
+  };
+
+  const handleEditSave = async () => {
+    // Client-side validation
+    for (const box of editBoxes) {
+      if (box.selectedFlavors.length === 0) {
+        setEditError("Each box must have at least one flavor selected.");
+        return;
+      }
+    }
+    if (editBoxes.length === 0) {
+      setEditError("Order must have at least one box.");
+      return;
+    }
+
+    // Build OrderItem[] from editBoxes — each box becomes quantity:1 with even distribution
+    const items: OrderItem[] = editBoxes.map((box) => {
+      const piecesPerBox = box.type === "party_box" ? 40 : 8;
+      const numFlavors = box.selectedFlavors.length;
+      const basePieces = Math.floor(piecesPerBox / numFlavors);
+      const remainder = piecesPerBox % numFlavors;
+      return {
+        type: box.type,
+        quantity: 1,
+        price_cents: box.type === "party_box" ? 22500 : 7800,
+        flavors: box.selectedFlavors.map((name, idx) => ({
+          name,
+          quantity: basePieces + (idx < remainder ? 1 : 0),
+        })),
+      };
+    });
+
+    // Compute delivery window end (start + 30 min)
+    let deliveryWindowEnd: string | undefined;
+    if (editFulfillmentType === "delivery" && editTimeStart) {
+      const [h, m] = editTimeStart.split(":").map(Number);
+      const endM = m + 30;
+      const endH = endM >= 60 ? h + 1 : h;
+      deliveryWindowEnd = `${endH.toString().padStart(2, "0")}:${(endM % 60).toString().padStart(2, "0")}`;
+    }
+
+    const payload = {
+      customer_name: editName,
+      customer_email: editEmail,
+      customer_phone: editPhone,
+      fulfillment_type: editFulfillmentType,
+      pickup_date: editFulfillmentType === "pickup" ? editDate : undefined,
+      pickup_time: editFulfillmentType === "pickup" ? editTimeStart : undefined,
+      delivery_date: editFulfillmentType === "delivery" ? editDate : undefined,
+      delivery_window_start: editFulfillmentType === "delivery" ? editTimeStart : undefined,
+      delivery_window_end: editFulfillmentType === "delivery" ? deliveryWindowEnd : undefined,
+      delivery_address: editFulfillmentType === "delivery" ? editAddress : undefined,
+      delivery_notes: editNotes || undefined,
+      order_data: {
+        items,
+        addons: editAddons.filter((a) => a.quantity > 0),
+        serves_count: order.order_data.serves_count,
+      },
+    };
+
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditMode(false);
+        onUpdate();
+      } else {
+        const data = await res.json();
+        setEditError(data.error || "Failed to save changes.");
+      }
+    } catch {
+      setEditError("Network error. Please try again.");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -326,6 +492,264 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
         </div>
       )}
 
+      {/* ── Edit Mode UI ─────────────────────────────────────────── */}
+      {editMode && (
+        <div className="space-y-6 border-2 border-blue-300 bg-blue-50 rounded p-5">
+          <h3 className="text-base font-black uppercase tracking-tight text-blue-900">Editing Order #{order.id}</h3>
+
+          {/* Section A: Customer Info */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Customer Info</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section B: Logistics */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Logistics</h4>
+            <div className="space-y-3">
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                  <input
+                    type="radio"
+                    checked={editFulfillmentType === "pickup"}
+                    onChange={() => setEditFulfillmentType("pickup")}
+                  />
+                  Pickup
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                  <input
+                    type="radio"
+                    checked={editFulfillmentType === "delivery"}
+                    onChange={() => setEditFulfillmentType("delivery")}
+                  />
+                  Delivery
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    min={getMinOrderDate()}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    {editFulfillmentType === "delivery" ? "Delivery Window Start" : "Pickup Time"}
+                  </label>
+                  <select
+                    value={editTimeStart}
+                    onChange={(e) => setEditTimeStart(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white"
+                  >
+                    {TIME_SLOTS.filter((t) => editFulfillmentType === "pickup" || t !== "19:00").map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {editFulfillmentType === "delivery" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Delivery Address</label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                    placeholder="Full delivery address"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  rows={2}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  placeholder="Delivery / pickup notes..."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section C: Boxes */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Boxes</h4>
+            {editBoxes.length === 0 && (
+              <p className="text-sm text-gray-400 italic mb-2">No boxes. Add at least one.</p>
+            )}
+            {editBoxes.map((box, boxIdx) => {
+              const maxFlavors = box.type === "party_box" ? 3 : 4;
+              const label = box.type === "party_box" ? "Party Box ($225)" : "Big Box ($78)";
+              return (
+                <div key={box.id} className="mb-3 p-3 bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold">{label}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditBoxes((prev) => prev.filter((_, i) => i !== boxIdx))}
+                      className="text-xs text-red-500 hover:text-red-700 font-semibold"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Select 1–{maxFlavors} flavor{maxFlavors > 1 ? "s" : ""}
+                    {box.selectedFlavors.length > 0 && ` (${box.selectedFlavors.length} selected)`}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableFlavors.map((f) => {
+                      const isSelected = box.selectedFlavors.includes(f.name);
+                      const atMax = !isSelected && box.selectedFlavors.length >= maxFlavors;
+                      return (
+                        <button
+                          key={f.name}
+                          type="button"
+                          disabled={atMax}
+                          onClick={() => {
+                            setEditBoxes((prev) =>
+                              prev.map((b, i) => {
+                                if (i !== boxIdx) return b;
+                                const flavors = isSelected
+                                  ? b.selectedFlavors.filter((n) => n !== f.name)
+                                  : [...b.selectedFlavors, f.name];
+                                return { ...b, selectedFlavors: flavors };
+                              })
+                            );
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                            isSelected
+                              ? "bg-black text-white border-black"
+                              : atMax
+                              ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed"
+                              : "bg-white text-gray-700 border-gray-300 hover:border-black"
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setEditBoxes((prev) => [
+                    ...prev,
+                    { id: `box-${Date.now()}`, type: "party_box", selectedFlavors: [] },
+                  ])
+                }
+                className="text-sm font-semibold border-2 border-black px-3 py-1 hover:bg-gray-100"
+              >
+                + Party Box
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setEditBoxes((prev) => [
+                    ...prev,
+                    { id: `box-${Date.now()}`, type: "big_box", selectedFlavors: [] },
+                  ])
+                }
+                className="text-sm font-semibold border-2 border-gray-400 px-3 py-1 hover:bg-gray-100"
+              >
+                + Big Box
+              </button>
+            </div>
+          </div>
+
+          {/* Section D: Add-ons */}
+          {editAddons.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Add-ons</h4>
+              {editAddons.map((addon, idx) => (
+                <div key={addon.name} className="flex items-center gap-3 mb-2">
+                  <span className="text-sm text-gray-700 flex-1">
+                    {addon.name} (${(addon.price_cents / 100).toFixed(2)} each)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={addon.quantity}
+                    onChange={(e) => {
+                      const qty = Math.max(0, parseInt(e.target.value) || 0);
+                      setEditAddons((prev) =>
+                        prev.map((a, i) => (i === idx ? { ...a, quantity: qty } : a))
+                      );
+                    }}
+                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm text-center"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Error */}
+          {editError && (
+            <p className="text-sm font-semibold text-red-600">{editError}</p>
+          )}
+
+          {/* Footer buttons */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleEditSave}
+              disabled={editSaving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black px-5 py-2 uppercase tracking-wide text-sm border-2 border-blue-600 transition-colors"
+            >
+              {editSaving ? "Saving..." : "Save Changes"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEditMode(false); setEditError(null); }}
+              disabled={editSaving}
+              className="bg-white hover:bg-gray-100 text-gray-800 font-black px-5 py-2 uppercase tracking-wide text-sm border-2 border-gray-400 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Read-only view (hidden when editing) ─────────────────── */}
+      {!editMode && (
+      <>
+
       {/* Order Details */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div>
@@ -448,6 +872,18 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Edit Order button */}
+      {order.status !== "paid" && order.status !== "completed" && (
+        <div>
+          <button
+            onClick={enterEditMode}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-black uppercase tracking-wide border-2 border-blue-600 transition-colors"
+          >
+            Edit Order
+          </button>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3 items-center flex-wrap">
@@ -715,6 +1151,8 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

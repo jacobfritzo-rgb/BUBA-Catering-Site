@@ -72,6 +72,159 @@ export async function PATCH(
 
     const currentStatus = result.rows[0].status as OrderStatus;
 
+    // ── Full-order edit branch ─────────────────────────────────────────────
+    // Triggered when body contains customer_name, fulfillment_type, or order_data
+    if (body.customer_name !== undefined || body.fulfillment_type !== undefined || body.order_data !== undefined) {
+      if (currentStatus === "paid" || currentStatus === "completed") {
+        return NextResponse.json(
+          { error: "Cannot edit a paid or completed order" },
+          { status: 400 }
+        );
+      }
+
+      // Validate required fields
+      if (!body.customer_name || !body.customer_email || !body.customer_phone) {
+        return NextResponse.json(
+          { error: "customer_name, customer_email, and customer_phone are required" },
+          { status: 400 }
+        );
+      }
+      if (!body.fulfillment_type || (body.fulfillment_type !== "pickup" && body.fulfillment_type !== "delivery")) {
+        return NextResponse.json(
+          { error: "fulfillment_type must be 'pickup' or 'delivery'" },
+          { status: 400 }
+        );
+      }
+      if (body.fulfillment_type === "delivery" && !body.delivery_address) {
+        return NextResponse.json(
+          { error: "delivery_address is required for delivery orders" },
+          { status: 400 }
+        );
+      }
+
+      const orderDate = body.fulfillment_type === "pickup" ? body.pickup_date : body.delivery_date;
+      if (!orderDate) {
+        return NextResponse.json(
+          { error: body.fulfillment_type === "pickup" ? "pickup_date is required" : "delivery_date is required" },
+          { status: 400 }
+        );
+      }
+
+      if (!body.order_data?.items || body.order_data.items.length === 0) {
+        return NextResponse.json(
+          { error: "Order must contain at least one box" },
+          { status: 400 }
+        );
+      }
+
+      // Validate items + flavors
+      const flavorsResult = await db.execute("SELECT name FROM flavors");
+      const availableFlavors = new Set(flavorsResult.rows.map(row => row.name as string));
+
+      for (const item of body.order_data.items) {
+        const maxFlavors = item.type === "party_box" ? 3 : 4;
+        if (item.flavors.length < 1 || item.flavors.length > maxFlavors) {
+          return NextResponse.json(
+            { error: `${item.type === "party_box" ? "Party Box" : "Big Box"} must have 1-${maxFlavors} flavors selected` },
+            { status: 400 }
+          );
+        }
+        const expectedPieces = item.type === "party_box" ? 40 : 8;
+        const totalQuantity = item.flavors.reduce((sum: number, f: { quantity: number }) => sum + f.quantity, 0);
+        if (totalQuantity !== expectedPieces) {
+          return NextResponse.json(
+            { error: `${item.type === "party_box" ? "Party Box" : "Big Box"} must have exactly ${expectedPieces} pieces total` },
+            { status: 400 }
+          );
+        }
+        for (const flavor of item.flavors) {
+          if (!availableFlavors.has(flavor.name)) {
+            return NextResponse.json(
+              { error: `Flavor "${flavor.name}" does not exist` },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
+      // Fetch current order for delivery_fee (carry it over)
+      const fullOrderResult = await db.execute({
+        sql: "SELECT delivery_fee FROM orders WHERE id = ?",
+        args: [id],
+      });
+      const currentDeliveryFee = Number(fullOrderResult.rows[0].delivery_fee) || 0;
+
+      // Recalculate total_price
+      let totalPrice = 0;
+      for (const item of body.order_data.items) {
+        totalPrice += item.price_cents * item.quantity;
+      }
+      if (body.order_data.addons) {
+        for (const addon of body.order_data.addons) {
+          totalPrice += addon.price_cents * addon.quantity;
+        }
+      }
+      if (body.fulfillment_type === "delivery") {
+        totalPrice += currentDeliveryFee;
+      }
+
+      // Recalculate deadlines
+      const windowStart = body.fulfillment_type === "pickup" ? body.pickup_time! : body.delivery_window_start!;
+      const productionDeadline = calculateProductionDeadline(orderDate);
+      const bakeOffsetMinutes = body.fulfillment_type === "delivery" ? 90 : 45;
+      const bakeDeadline = calculateBakeDeadline(orderDate, windowStart, bakeOffsetMinutes);
+
+      // Compute delivery window end (windowStart + 30 min)
+      let deliveryWindowEnd = body.delivery_window_end || null;
+      if (body.fulfillment_type === "delivery" && body.delivery_window_start && !body.delivery_window_end) {
+        const [h, m] = body.delivery_window_start.split(":").map(Number);
+        const endM = m + 30;
+        const endH = endM >= 60 ? h + 1 : h;
+        deliveryWindowEnd = `${endH.toString().padStart(2, "0")}:${(endM % 60).toString().padStart(2, "0")}`;
+      }
+
+      await db.execute({
+        sql: `UPDATE orders SET
+          customer_name = ?, customer_email = ?, customer_phone = ?,
+          fulfillment_type = ?,
+          pickup_date = ?, pickup_time = ?,
+          delivery_date = ?, delivery_window_start = ?, delivery_window_end = ?,
+          delivery_address = ?, delivery_notes = ?,
+          order_data = ?, total_price = ?,
+          production_deadline = ?, bake_deadline = ?
+          WHERE id = ?`,
+        args: [
+          body.customer_name,
+          body.customer_email,
+          body.customer_phone,
+          body.fulfillment_type,
+          body.fulfillment_type === "pickup" ? (body.pickup_date || null) : null,
+          body.fulfillment_type === "pickup" ? (body.pickup_time || null) : null,
+          body.fulfillment_type === "delivery" ? (body.delivery_date || null) : null,
+          body.fulfillment_type === "delivery" ? (body.delivery_window_start || null) : null,
+          body.fulfillment_type === "delivery" ? deliveryWindowEnd : null,
+          body.fulfillment_type === "delivery" ? (body.delivery_address || null) : null,
+          body.delivery_notes || null,
+          JSON.stringify(body.order_data),
+          totalPrice,
+          productionDeadline,
+          bakeDeadline,
+          id,
+        ],
+      });
+
+      const editedResult = await db.execute({
+        sql: "SELECT * FROM orders WHERE id = ?",
+        args: [id],
+      });
+      const editedOrder = {
+        ...editedResult.rows[0],
+        order_data: JSON.parse(editedResult.rows[0].order_data as string),
+      };
+      return NextResponse.json(editedOrder);
+    }
+    // ── End full-order edit branch ─────────────────────────────────────────
+
     // Build dynamic update for extra fields (rejection_reason, metrospeedy, etc.)
     const extraUpdates: string[] = [];
     const extraArgs: (string | number | null)[] = [];
