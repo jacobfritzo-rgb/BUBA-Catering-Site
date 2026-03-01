@@ -78,6 +78,7 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
   const deliveryFeeCents = order.delivery_fee || 0;
   const subtotalCents = order.total_price - deliveryFeeCents;
   const subtotalFormatted = `$${(subtotalCents / 100).toFixed(2)}`;
+  const totalFormatted = `$${(order.total_price / 100).toFixed(2)}`;
   const deliveryFeeDisplay = deliveryFeeCents > 0
     ? `$${(deliveryFeeCents / 100).toFixed(2)}`
     : 'TBD';
@@ -86,6 +87,23 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
       ? '<p><em>Your delivery fee has been confirmed and is included in the total above.</em></p>'
       : '<p><em>Note: The delivery fee will be confirmed separately and is not included in the estimated subtotal above.</em></p>'
     : '<p><em>Note: This is an estimated total. Final pricing will be confirmed when we review your order.</em></p>';
+
+  // Used in approval email: shows the correct pricing breakdown depending on whether fee is set
+  let feeBreakdownHtml: string;
+  if (order.fulfillment_type === 'delivery') {
+    if (deliveryFeeCents > 0) {
+      feeBreakdownHtml =
+        `<p><strong>Food subtotal:</strong> ${subtotalFormatted}</p>` +
+        `<p><strong>Delivery fee:</strong> ${deliveryFeeDisplay}</p>` +
+        `<p><strong>Estimated total (excl. tax):</strong> ${totalFormatted}</p>`;
+    } else {
+      feeBreakdownHtml =
+        `<p><strong>Estimated food subtotal:</strong> ${subtotalFormatted}</p>` +
+        `<p><em>Delivery fee will be confirmed separately and added to your total.</em></p>`;
+    }
+  } else {
+    feeBreakdownHtml = `<p><strong>Estimated total (excl. tax):</strong> ${totalFormatted}</p>`;
+  }
 
   return {
     order_id: String(order.id),
@@ -103,6 +121,7 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     subtotal: subtotalFormatted,
     delivery_fee_display: deliveryFeeDisplay,
     price_estimate_note: priceEstimateNote,
+    fee_breakdown_html: feeBreakdownHtml,
     items_html: itemsHtml + addonsHtml,
     items_html_simple: itemsHtmlSimple + addonsHtml,
     admin_url: `${baseUrl}/admin`,

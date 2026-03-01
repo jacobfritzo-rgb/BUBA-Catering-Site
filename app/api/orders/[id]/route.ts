@@ -284,26 +284,13 @@ export async function PATCH(
       });
     }
 
-    // Handle delivery_fee update — recalculates total_price atomically
+    // Handle delivery_fee update — recalculates total_price atomically, no email sent
     if (body.delivery_fee !== undefined) {
       // Subtract old fee, add new fee (safe even if called multiple times)
       await db.execute({
         sql: "UPDATE orders SET delivery_fee = ?, total_price = total_price - delivery_fee + ? WHERE id = ?",
         args: [body.delivery_fee, body.delivery_fee, id],
       });
-      const feeOrderResult = await db.execute({
-        sql: "SELECT * FROM orders WHERE id = ?",
-        args: [id],
-      });
-      if (feeOrderResult.rows.length > 0) {
-        const feeOrder = {
-          ...feeOrderResult.rows[0],
-          order_data: JSON.parse(feeOrderResult.rows[0].order_data as string),
-        };
-        sendNotification('delivery_fee_confirmed', feeOrder as any).catch(err =>
-          console.error('delivery_fee_confirmed notification failed:', err)
-        );
-      }
     }
 
     // Handle status update — admin can set any status (no restrictions)
