@@ -11,7 +11,7 @@ import {
 // as the x-cron-secret header value.
 export async function GET(request: NextRequest) {
   const secret = request.headers.get("x-cron-secret");
-  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { OrderStatus, UpdateOrderRequest } from "@/lib/types";
 import { sendNotification, generateProductionSheetHTML } from "@/lib/email";
+import { requireAdmin } from "@/lib/api-auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
 
   try {
@@ -44,6 +48,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
 
   try {

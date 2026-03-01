@@ -217,7 +217,7 @@ export default function PrintProductionSheet() {
             </div>
             <div>
               <strong>Total Boxes:</strong>{' '}
-              {orders.reduce((sum, o) => sum + o.order_data.items.length, 0)}
+              {orders.reduce((sum, o) => sum + o.order_data.items.reduce((s, i) => s + i.quantity, 0), 0)}
             </div>
           </div>
         </div>

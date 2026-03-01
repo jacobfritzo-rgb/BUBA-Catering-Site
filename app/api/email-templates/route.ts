@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
+import { requireAdmin } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
   try {
     const result = await db.execute(
@@ -15,6 +19,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
   try {
     const { trigger_name, subject, body_html, customer_subject, customer_body_html } = await request.json();

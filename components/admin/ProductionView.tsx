@@ -307,7 +307,7 @@ export default function ProductionView({ orders, onUpdate }: ProductionViewProps
                             ))}
                           </div>
                         ) : (
-                          <div className="text-xs text-gray-400 ml-2 italic">Use in-store stock ({item.quantity * 4} burekas)</div>
+                          <div className="text-xs text-gray-400 ml-2 italic">Use in-store stock ({item.quantity * 8} burekas)</div>
                         )}
                       </div>
                     ))}

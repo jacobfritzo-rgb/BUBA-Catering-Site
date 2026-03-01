@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { CreateOrderRequest, OrderStatus } from "@/lib/types";
 import { sendNewOrderNotification } from "@/lib/email";
+import { requireAdmin } from "@/lib/api-auth";
 
 // Helper to validate order date (pickup or delivery)
 function validateOrderDate(orderDate: string): string | null {
-  // Parse as local date to avoid timezone issues
+  // Parse as local date (server timezone) to avoid UTC date-shift
   const [year, month, day] = orderDate.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0); // Start of today
+  const date = new Date(year, month - 1, day); // midnight on fulfillment day
+  const now = new Date(); // exact submission time
 
-  // Check if date is at least 72 hours from now
+  // Require at least 72 hours from the moment the order is placed
   const minDate = new Date(now.getTime() + 72 * 60 * 60 * 1000);
   if (date < minDate) {
     return "Order date must be at least 72 hours from now";
@@ -240,7 +240,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
   try {
     await db.execute("DELETE FROM orders");
@@ -253,6 +256,9 @@ export async function DELETE() {
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   await initDb();
 
   try {

@@ -433,7 +433,7 @@ export function generateProductionSheetHTML(orders: Order[]): string {
 
     html += `<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; background: #f0f0f0; padding: 15px;">`;
     html += `<div><strong>Party Boxes:</strong> ${partyBoxes} (${partyBoxes * 40} pcs)</div>`;
-    html += `<div><strong>Big Boxes:</strong> ${bigBoxes} (${bigBoxes * 4} burekas — in-store stock)</div>`;
+    html += `<div><strong>Big Boxes:</strong> ${bigBoxes} (${bigBoxes * 8} burekas — in-store stock)</div>`;
     html += `</div>`;
 
     html += '<h3 style="border-bottom: 2px solid black;">PARTY BOX FLAVOR PRODUCTION LIST:</h3>';

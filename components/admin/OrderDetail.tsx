@@ -265,10 +265,10 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
     text += `Total: $${(order.total_price / 100).toFixed(2)}\n\n`;
 
     if (order.fulfillment_type === "delivery") {
-      text += `Delivery: ${new Date(order.delivery_date!).toLocaleDateString()} ${order.delivery_window_start}-${order.delivery_window_end} to ${order.delivery_address}\n`;
+      text += `Delivery: ${new Date(order.delivery_date! + 'T00:00:00').toLocaleDateString()} ${order.delivery_window_start}-${order.delivery_window_end} to ${order.delivery_address}\n`;
       text += `Notes: ${order.delivery_notes || "None"}`;
     } else {
-      text += `Pickup: ${new Date(order.pickup_date!).toLocaleDateString()} at ${order.pickup_time}\n`;
+      text += `Pickup: ${new Date(order.pickup_date! + 'T00:00:00').toLocaleDateString()} at ${order.pickup_time}\n`;
       text += `Notes: ${order.delivery_notes || "None"}`;
     }
 
@@ -281,7 +281,9 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   const isPaid = order.status === "paid";
 
   // Derived fee calculator values
-  const feeBaseFee = calcBaseDeliveryFee(order.total_price);
+  // Use subtotal (total_price minus any existing delivery_fee) so recalculating doesn't inflate the base fee tier
+  const orderSubtotal = order.total_price - (order.delivery_fee || 0);
+  const feeBaseFee = calcBaseDeliveryFee(orderSubtotal);
   const feeMileageFee = Math.max(0, feeCalcMiles - 2) * 2;
   const feeFuelSurcharge = calcFuelSurcharge(feeCalcGasPrice);
   const feeWaitFee = feeCalcWaitMins > 0 ? Math.ceil(feeCalcWaitMins / 15) * 12.50 : 0;
@@ -343,7 +345,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
             {order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} Information
           </h4>
           <p className="text-sm text-gray-600">
-            {new Date(order.fulfillment_type === "delivery" ? order.delivery_date! : order.pickup_date!).toLocaleDateString()}
+            {new Date((order.fulfillment_type === "delivery" ? order.delivery_date! : order.pickup_date!) + 'T00:00:00').toLocaleDateString()}
           </p>
           <p className="text-sm text-gray-600">
             {order.fulfillment_type === "delivery"
@@ -404,7 +406,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
       <div className={isPaid ? "bg-yellow-50 border border-yellow-200 p-4 rounded" : "p-4 border border-gray-200 rounded"}>
         <h4 className="text-sm font-semibold text-gray-700 mb-2">Production Deadlines</h4>
         <p className={`text-sm ${isPaid ? "font-bold text-yellow-900" : "text-gray-600"}`}>
-          Production Deadline: {new Date(order.production_deadline).toLocaleDateString()}
+          Production Deadline: {new Date(order.production_deadline + 'T00:00:00').toLocaleDateString()}
         </p>
         <p className={`text-sm ${isPaid ? "font-bold text-yellow-900" : "text-gray-600"}`}>
           Bake Deadline: {new Date(order.bake_deadline).toLocaleString()}
@@ -521,8 +523,8 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                   {/* Auto-populated order value + base fee */}
                   <div className="text-sm space-y-1 pb-2 border-b border-gray-100">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Order Value:</span>
-                      <span className="font-bold">${(order.total_price / 100).toFixed(2)}</span>
+                      <span className="text-gray-600">Order Subtotal:</span>
+                      <span className="font-bold">${(orderSubtotal / 100).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Base Delivery Fee:</span>
