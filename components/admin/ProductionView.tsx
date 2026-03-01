@@ -257,7 +257,12 @@ export default function ProductionView({ orders, onUpdate }: ProductionViewProps
                         <div className="font-bold text-gray-900">Order #{order.id} — {order.customer_name}</div>
                         <div className="text-sm text-gray-600">
                           {order.fulfillment_type === "delivery" ? (
-                            <>📦 Delivery {order.delivery_window_start}–{order.delivery_window_end}</>
+                            <>
+                              📦 Customer window: {order.delivery_window_start}–{order.delivery_window_end}
+                              {order.metrospeedy_pickup_time && (
+                                <span className="ml-2 font-semibold text-orange-700"> | MetroSpeedy pickup: {order.metrospeedy_pickup_time}</span>
+                              )}
+                            </>
                           ) : (
                             <>🏪 Pickup {order.pickup_time}</>
                           )}

@@ -14,6 +14,7 @@ interface Order {
   delivery_window_start?: string;
   delivery_window_end?: string;
   delivery_address?: string;
+  metrospeedy_pickup_time?: string | null;
   order_data: {
     items: Array<{
       type: string;
@@ -146,7 +147,9 @@ export default function PrintProductionSheet() {
             {orders.map((order, idx) => {
               const date = order.fulfillment_type === 'delivery' ? order.delivery_date! : order.pickup_date!;
               const time = order.fulfillment_type === 'delivery'
-                ? `${order.delivery_window_start}-${order.delivery_window_end}`
+                ? order.metrospeedy_pickup_time
+                  ? `Pickup: ${order.metrospeedy_pickup_time} | Cust: ${order.delivery_window_start}–${order.delivery_window_end}`
+                  : `Cust window: ${order.delivery_window_start}–${order.delivery_window_end}`
                 : order.pickup_time;
               const type = order.fulfillment_type === 'delivery' ? 'DELIVERY' : 'PICKUP';
 

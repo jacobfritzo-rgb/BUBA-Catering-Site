@@ -10,9 +10,19 @@ interface PortionCalculatorProps {
 const PARTY_BOX_PRICE = 225;
 const BIG_BOX_PRICE = 78;
 
-// Servings per box per mode
-const PB_SERVINGS = { main: 10, side: 15 };
-const BB_SERVINGS = { main: 4, side: 8 };
+// Serving sizes per box per mode
+// Party Box (40 mini burekas): feeds 10–12 as main, 12–15 as side
+// Big Box (8 half-size burekas): feeds 4 as main, 6–7 as side
+const PB_SERVES_MIN = { main: 10, side: 12 }; // conservative minimum (how many a box safely feeds)
+const PB_SERVES_MAX = { main: 12, side: 15 }; // max capacity (used to calculate Party Box alternates)
+const BB_SERVES = { main: 4, side: 6 };
+
+// Never suggest more than this many Big Boxes — above this, Party Boxes are the right call
+const BIG_BOX_MAX = 8;
+
+// In Party Box territory: if the remainder after filling with Party Boxes is less than
+// this fraction of one Party Box, fill the gap with Big Boxes instead of adding another Party Box.
+const COMBO_THRESHOLD = 0.6;
 
 type Mode = "main" | "side";
 
@@ -22,26 +32,50 @@ interface BoxRec {
 }
 
 function buildRec(n: number, mode: Mode): { recommended: BoxRec; alternate: BoxRec | null } {
-  const nEff = mode === "main" ? Math.ceil(n * 1.1) : n;
-  const partyQty = Math.ceil(nEff / PB_SERVINGS[mode]);
-  const bigQty = Math.ceil(nEff / BB_SERVINGS[mode]);
+  const pbMin = PB_SERVES_MIN[mode];
+  const pbMax = PB_SERVES_MAX[mode];
+  const bbServes = BB_SERVES[mode];
 
-  if (n >= 41) {
-    return { recommended: { partyQty, bigQty: 0 }, alternate: null };
-  } else if (n >= 13) {
+  const pureBig = Math.ceil(n / bbServes);
+
+  // Big Box zone: group is small enough that Big Boxes are the primary recommendation
+  if (pureBig <= BIG_BOX_MAX) {
+    // Offer Party Box as alternate once the group is large enough to warrant one
+    const purePartyAlt = Math.ceil(n / pbMax);
+    const showPartyAlt = pureBig >= 3;
     return {
-      recommended: { partyQty, bigQty: 0 },
-      alternate: { partyQty: 0, bigQty },
-    };
-  } else {
-    return {
-      recommended: { partyQty: 0, bigQty },
-      alternate: { partyQty, bigQty: 0 },
+      recommended: { partyQty: 0, bigQty: pureBig },
+      alternate: showPartyAlt ? { partyQty: purePartyAlt, bigQty: 0 } : null,
     };
   }
+
+  // Party Box zone: group is too large for 8 Big Boxes — switch to Party Boxes
+  const partyFloor = Math.floor(n / pbMin);
+  const remaining = n - partyFloor * pbMin;
+  const purePartySafe = Math.ceil(n / pbMin);
+
+  if (remaining === 0) {
+    return { recommended: { partyQty: purePartySafe, bigQty: 0 }, alternate: null };
+  }
+
+  // There's a gap. If it's small, fill with Big Boxes instead of adding a whole extra Party Box.
+  const bigForGap = Math.ceil(remaining / bbServes);
+  if (remaining < pbMin * COMBO_THRESHOLD) {
+    return {
+      recommended: { partyQty: partyFloor, bigQty: bigForGap },
+      alternate: { partyQty: purePartySafe, bigQty: 0 },
+    };
+  }
+
+  return { recommended: { partyQty: purePartySafe, bigQty: 0 }, alternate: null };
 }
 
 function recLabel(rec: BoxRec): string {
+  if (rec.partyQty > 0 && rec.bigQty > 0) {
+    const pb = `${rec.partyQty} Party Box${rec.partyQty > 1 ? "es" : ""}`;
+    const bb = `${rec.bigQty} Big Box${rec.bigQty > 1 ? "es" : ""}`;
+    return `${pb} + ${bb}`;
+  }
   if (rec.partyQty > 0) return `${rec.partyQty} Party Box${rec.partyQty > 1 ? "es" : ""}`;
   return `${rec.bigQty} Big Box${rec.bigQty > 1 ? "es" : ""}`;
 }

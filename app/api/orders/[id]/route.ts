@@ -267,6 +267,10 @@ export async function PATCH(
       extraUpdates.push("metrospeedy_notes = ?");
       extraArgs.push(body.metrospeedy_notes);
     }
+    if (body.metrospeedy_pickup_time !== undefined) {
+      extraUpdates.push("metrospeedy_pickup_time = ?");
+      extraArgs.push(body.metrospeedy_pickup_time || null);
+    }
     if (body.production_done !== undefined) {
       extraUpdates.push("production_done = ?");
       extraArgs.push(body.production_done);

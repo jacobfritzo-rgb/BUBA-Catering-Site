@@ -254,22 +254,24 @@ export function generateFOHScheduleHTML(orders: Order[], date: Date): string {
       html += `<div style="padding: 15px 20px;">`;
       html += `<h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #E10600; padding-bottom: 5px; color: #E10600;">📦 Deliveries (${deliveries.length})</h2>`;
       html += `<table style="width: 100%; border-collapse: collapse; font-size: 14px;">`;
-      html += `<tr style="background: #f0f0f0;"><th style="padding: 8px; text-align: left;">Time</th><th style="padding: 8px; text-align: left;">Customer</th><th style="padding: 8px; text-align: left;">Address</th><th style="padding: 8px; text-align: left;">Phone</th><th style="padding: 8px; text-align: left;">Boxes</th></tr>`;
+      html += `<tr style="background: #f0f0f0;"><th style="padding: 8px; text-align: left;">MetroSpeedy Pickup</th><th style="padding: 8px; text-align: left;">Customer Window</th><th style="padding: 8px; text-align: left;">Customer</th><th style="padding: 8px; text-align: left;">Address</th><th style="padding: 8px; text-align: left;">Phone</th><th style="padding: 8px; text-align: left;">Boxes</th></tr>`;
       deliveries
         .sort((a, b) => (a.delivery_window_start || '').localeCompare(b.delivery_window_start || ''))
         .forEach((order, i) => {
           const boxes = order.order_data.items.map(item =>
             `${item.type === 'party_box' ? 'Party' : 'Big'} x${item.quantity}`
           ).join(', ');
+          const pickupTime = order.metrospeedy_pickup_time || '—';
           html += `<tr style="background: ${i % 2 === 0 ? '#fff' : '#f9f9f9'}; border-bottom: 1px solid #eee;">`;
-          html += `<td style="padding: 8px; font-weight: bold;">${order.delivery_window_start}–${order.delivery_window_end}</td>`;
+          html += `<td style="padding: 8px; font-weight: bold; color: #c05000;">${pickupTime}</td>`;
+          html += `<td style="padding: 8px;">${order.delivery_window_start}–${order.delivery_window_end}</td>`;
           html += `<td style="padding: 8px; font-weight: bold;">${order.customer_name}</td>`;
           html += `<td style="padding: 8px;">${order.delivery_address || '—'}</td>`;
           html += `<td style="padding: 8px;">${order.customer_phone}</td>`;
           html += `<td style="padding: 8px;">${boxes}</td>`;
           html += `</tr>`;
           if (order.delivery_notes) {
-            html += `<tr style="background: #fffbe6;"><td colspan="5" style="padding: 6px 8px; font-size: 12px; color: #666;">📝 ${order.delivery_notes}</td></tr>`;
+            html += `<tr style="background: #fffbe6;"><td colspan="6" style="padding: 6px 8px; font-size: 12px; color: #666;">📝 ${order.delivery_notes}</td></tr>`;
           }
         });
       html += `</table></div>`;
@@ -352,13 +354,16 @@ export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
     html += `<div style="padding: 15px 20px;">`;
     html += `<h2 style="font-size: 15px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">ORDERS</h2>`;
     orders.forEach(order => {
-      const time = order.fulfillment_type === 'delivery'
-        ? `${order.delivery_window_start}–${order.delivery_window_end}`
+      const customerTime = order.fulfillment_type === 'delivery'
+        ? `customer window ${order.delivery_window_start}–${order.delivery_window_end}`
         : order.pickup_time;
+      const pickupLabel = order.fulfillment_type === 'delivery' && order.metrospeedy_pickup_time
+        ? ` | MetroSpeedy pickup: ${order.metrospeedy_pickup_time}`
+        : '';
       html += `<div style="border: 2px solid #000; padding: 12px; margin-bottom: 12px; background: #fff;">`;
       html += `<div style="display: flex; justify-content: space-between; background: #ffe6e6; padding: 8px; margin: -12px -12px 10px -12px;">`;
       html += `<strong>Order #${order.id} — ${order.customer_name}</strong>`;
-      html += `<span>${order.fulfillment_type === 'delivery' ? '📦 Delivery' : '🏪 Pickup'} ${time}</span>`;
+      html += `<span>${order.fulfillment_type === 'delivery' ? '📦 Delivery' : '🏪 Pickup'} ${customerTime}${pickupLabel}</span>`;
       html += `</div>`;
       order.order_data.items.forEach(item => {
         if (item.type === 'party_box') {

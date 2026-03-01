@@ -52,6 +52,7 @@ export interface Order {
   rejection_reason?: string | null;
   metrospeedy_status?: string;
   metrospeedy_notes?: string | null;
+  metrospeedy_pickup_time?: string | null;
   production_done?: number;
   production_done_at?: string | null;
 }
@@ -96,6 +97,7 @@ export interface UpdateOrderRequest {
   rejection_reason?: string;
   metrospeedy_status?: string;
   metrospeedy_notes?: string;
+  metrospeedy_pickup_time?: string;
   production_done?: number;
   delivery_fee?: number;
   // Full-edit fields (present → triggers full order edit branch)

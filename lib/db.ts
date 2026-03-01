@@ -246,6 +246,7 @@ export async function initDb() {
       "ALTER TABLE orders ADD COLUMN rejection_reason TEXT",
       "ALTER TABLE orders ADD COLUMN metrospeedy_status TEXT DEFAULT 'not_submitted'",
       "ALTER TABLE orders ADD COLUMN metrospeedy_notes TEXT",
+      "ALTER TABLE orders ADD COLUMN metrospeedy_pickup_time TEXT",
       "ALTER TABLE orders ADD COLUMN production_done INTEGER DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN production_done_at TEXT",
     ];

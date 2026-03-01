@@ -85,6 +85,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
   // MetroSpeedy state
   const [metroStatus, setMetroStatus] = useState(order.metrospeedy_status || "not_submitted");
   const [metroNotes, setMetroNotes] = useState(order.metrospeedy_notes || "");
+  const [metroPickupTime, setMetroPickupTime] = useState(order.metrospeedy_pickup_time || "");
   const [isSavingMetro, setIsSavingMetro] = useState(false);
   const [metroMsg, setMetroMsg] = useState("");
 
@@ -328,7 +329,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metrospeedy_status: metroStatus, metrospeedy_notes: metroNotes }),
+        body: JSON.stringify({ metrospeedy_status: metroStatus, metrospeedy_notes: metroNotes, metrospeedy_pickup_time: metroPickupTime || null }),
       });
       setMetroMsg(res.ok ? "Saved!" : "Failed to save.");
     } catch {
@@ -771,11 +772,20 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
           <p className="text-sm text-gray-600">
             {new Date((order.fulfillment_type === "delivery" ? order.delivery_date! : order.pickup_date!) + 'T00:00:00').toLocaleDateString()}
           </p>
-          <p className="text-sm text-gray-600">
-            {order.fulfillment_type === "delivery"
-              ? `${order.delivery_window_start} - ${order.delivery_window_end}`
-              : order.pickup_time}
-          </p>
+          {order.fulfillment_type === "delivery" ? (
+            <>
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Customer window:</span> {order.delivery_window_start} – {order.delivery_window_end}
+              </p>
+              {order.metrospeedy_pickup_time && (
+                <p className="text-sm font-semibold text-orange-700">
+                  MetroSpeedy pickup: {order.metrospeedy_pickup_time}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-600">{order.pickup_time}</p>
+          )}
           {order.fulfillment_type === "delivery" && order.delivery_address && (
             <p className="text-sm text-gray-600">{order.delivery_address}</p>
           )}
@@ -935,11 +945,22 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
               </select>
             </div>
             <div>
+              <label className="block text-xs font-semibold text-orange-800 mb-1 uppercase tracking-wide">MetroSpeedy Pickup Time</label>
+              <input
+                type="text"
+                value={metroPickupTime}
+                onChange={(e) => setMetroPickupTime(e.target.value)}
+                placeholder="e.g. 10:00 AM"
+                className="border-2 border-orange-300 bg-white rounded px-3 py-2 text-sm w-full"
+              />
+              <p className="text-xs text-orange-700 mt-1">When MetroSpeedy will pick up from BUBA (internal — not shown to customer)</p>
+            </div>
+            <div>
               <label className="block text-xs font-semibold text-orange-800 mb-1 uppercase tracking-wide">Notes / Reference #</label>
               <textarea
                 value={metroNotes}
                 onChange={(e) => setMetroNotes(e.target.value)}
-                placeholder="e.g. Confirmation #12345, pickup window 10-11am, driver name John..."
+                placeholder="e.g. Confirmation #12345, driver name John..."
                 rows={3}
                 className="border-2 border-orange-300 bg-white rounded px-3 py-2 text-sm w-full"
               />
