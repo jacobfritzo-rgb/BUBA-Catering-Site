@@ -323,7 +323,7 @@ export async function initDb() {
       },
       'order_approved': {
         subject: 'Your BUBA Catering order #{{order_id}} is confirmed!',
-        body: `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date}} at {{fulfillment_time}}</p><p><strong>Total:</strong> {{total}}</p><p>Thank you for choosing BUBA Catering!</p>`,
+        body: `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p><p><strong>Estimated Subtotal (excl. tax):</strong> {{subtotal}}</p><p>Thank you for choosing BUBA Catering!</p><p>— The BUBA Team</p>`,
       },
       'order_rejected': {
         subject: 'Regarding your BUBA Catering order #{{order_id}}',
@@ -373,6 +373,27 @@ export async function initDb() {
           args: [migratedBody],
         });
         console.log('Migrated new_order customer email template to simplified format');
+      }
+    }
+
+    // Migrate order_approved customer template: fix raw date and "Total" label
+    const approvedTemplate = await db.execute({
+      sql: "SELECT customer_body_html FROM email_templates WHERE trigger_name = 'order_approved'",
+      args: [],
+    });
+    if (approvedTemplate.rows.length > 0) {
+      const currentBody = String(approvedTemplate.rows[0].customer_body_html ?? '');
+      const needsMigration =
+        currentBody.includes('{{fulfillment_date}}') ||
+        currentBody.includes('<strong>Total:</strong>') ||
+        !currentBody.includes('{{subtotal}}');
+      if (needsMigration && currentBody.trim() !== '') {
+        const migratedBody = `<p>Hi {{customer_name}},</p><p>Great news — your catering order has been approved!</p><p>You'll receive an invoice from <strong>Toast</strong> shortly. To finalize your order, please pay the invoice when it arrives.</p><p><strong>Order details:</strong> {{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p><p><strong>Estimated Subtotal (excl. tax):</strong> {{subtotal}}</p><p>Thank you for choosing BUBA Catering!</p><p>— The BUBA Team</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'order_approved'",
+          args: [migratedBody],
+        });
+        console.log('Migrated order_approved customer email template');
       }
     }
 

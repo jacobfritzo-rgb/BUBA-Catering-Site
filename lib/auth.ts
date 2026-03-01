@@ -1,5 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 
+if (!process.env.JWT_SECRET) {
+  console.error(
+    "WARNING: JWT_SECRET env var is not set — using insecure default key. " +
+    "Anyone can forge admin tokens. Set JWT_SECRET in your Railway environment variables."
+  );
+}
+
 const SECRET_KEY = new TextEncoder().encode(
   process.env.JWT_SECRET || "buba-catering-secret-key-change-in-production"
 );

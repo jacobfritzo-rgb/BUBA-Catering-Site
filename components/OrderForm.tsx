@@ -240,6 +240,19 @@ export default function OrderForm() {
   // ─── Success screen ─────────────────────────────────────────────────────────
 
   if (orderSuccess) {
+    const successDate = orderDate
+      ? new Date(orderDate + "T00:00:00").toLocaleDateString("en-US", {
+          weekday: "long", month: "long", day: "numeric",
+        })
+      : "";
+    const successParty = boxes.filter((b) => b.type === "party_box").length;
+    const successBig = boxes.filter((b) => b.type === "big_box").length;
+    const successBoxLine = [
+      successParty > 0 ? `${successParty} Party Box${successParty > 1 ? "es" : ""}` : "",
+      successBig > 0 ? `${successBig} Big Box${successBig > 1 ? "es" : ""}` : "",
+    ].filter(Boolean).join(" + ");
+    const successSubtotal = (calculateTotal() / 100).toFixed(2);
+
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="max-w-md w-full border-4 border-[#E10600] p-8 text-center">
@@ -250,9 +263,15 @@ export default function OrderForm() {
             Thank you for your catering inquiry! We&apos;ll review your order and contact you
             within 24 hours to confirm availability, finalize pricing, and arrange payment.
           </p>
-          <div className="bg-gray-100 border-2 border-black p-4 mb-4">
-            <p className="text-sm font-bold text-black mb-1">ORDER ID: #{orderId}</p>
-            <p className="text-xs text-black/70">Save this for your records</p>
+          <div className="bg-gray-100 border-2 border-black p-4 mb-4 text-left space-y-1">
+            <p className="text-sm font-bold text-black">ORDER ID: #{orderId}</p>
+            <p className="text-xs text-black/70">
+              {fulfillmentType === "pickup" ? "Pickup" : "Delivery"} · {successDate} · {orderWindowStart}
+            </p>
+            {successBoxLine && (
+              <p className="text-xs text-black/70">{successBoxLine}</p>
+            )}
+            <p className="text-xs text-black/70">Subtotal: ${successSubtotal} (excl. tax &amp; delivery)</p>
           </div>
           <p className="text-xs text-black/60 italic">
             Check your email for confirmation details
@@ -376,12 +395,12 @@ export default function OrderForm() {
       {/* Event Photos */}
       <EventPhotos />
 
-      {/* Admin Link */}
+      {/* Admin Link — intentionally subtle */}
       <a
         href="/admin/login"
-        className="fixed top-4 right-4 text-sm font-black uppercase tracking-wide text-[#E10600] hover:text-white hover:bg-[#E10600] border-2 border-[#E10600] px-4 py-2 transition-colors z-50 bg-white"
+        className="fixed bottom-4 right-4 text-xs text-gray-400 hover:text-gray-600 z-50"
       >
-        ADMIN
+        Admin
       </a>
 
       {/* Order Form Section */}
@@ -495,6 +514,8 @@ export default function OrderForm() {
                           </option>
                         );
                       } else {
+                        // Exclude 19:00 for delivery — window end would be 19:30, past closing
+                        if (time === "19:00") return null;
                         const [h, m] = time.split(":").map(Number);
                         const em = m + 30;
                         const eh = em >= 60 ? h + 1 : h;

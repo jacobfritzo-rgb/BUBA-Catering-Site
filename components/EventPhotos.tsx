@@ -1,6 +1,28 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 export default function EventPhotos() {
+  const [imageKeys, setImageKeys] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/product-images")
+      .then((res) => res.json())
+      .then((data: { key: string }[]) => {
+        setImageKeys(new Set(data.map((img) => img.key)));
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const slots = [1, 2, 3, 4];
+  const filledSlots = loaded ? slots.filter((n) => imageKeys.has(`event-${n}`)) : [];
+
+  // Don't render the section at all until we know what's uploaded,
+  // and skip the section entirely if no event photos have been uploaded yet.
+  if (!loaded || filledSlots.length === 0) return null;
+
   return (
     <div className="bg-white py-16 px-4 border-t-4 border-black">
       <div className="max-w-6xl mx-auto">
@@ -14,21 +36,15 @@ export default function EventPhotos() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((num) => (
-            <div
-              key={num}
-              className="aspect-square bg-gray-200 border-4 border-black flex items-center justify-center"
-            >
-              <div className="text-center p-2">
-                <p className="text-xs font-black uppercase text-gray-600 mb-1">Event Photo {num}</p>
-                <p className="text-xs text-gray-500">/public/images/event-{num}.jpg</p>
-              </div>
+          {filledSlots.map((num) => (
+            <div key={num} className="aspect-square border-4 border-black overflow-hidden">
+              <img
+                src={`/api/product-images/event-${num}`}
+                alt={`BUBA catering event photo ${num}`}
+                className="w-full h-full object-cover"
+              />
             </div>
           ))}
-        </div>
-
-        <div className="mt-8 text-center text-sm text-gray-600">
-          <p className="font-medium">Add photos of parties, office gatherings, and events featuring BUBA</p>
         </div>
       </div>
     </div>
