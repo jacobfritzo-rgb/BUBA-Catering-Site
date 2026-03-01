@@ -4,6 +4,33 @@ import { OrderStatus, UpdateOrderRequest } from "@/lib/types";
 import { sendNotification, generateProductionSheetHTML } from "@/lib/email";
 import { requireAdmin } from "@/lib/api-auth";
 
+function calculateProductionDeadline(orderDate: string): string {
+  const [year, month, day] = orderDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split('T')[0];
+}
+
+function calculateBakeDeadline(orderDate: string, windowStart: string, offsetMinutes: number): string {
+  const [year, month, day] = orderDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  let hours: number, minutes: number;
+  if (windowStart.includes('AM') || windowStart.includes('PM')) {
+    const isPM = windowStart.includes('PM');
+    const timePart = windowStart.replace(/\s*(AM|PM)/i, '').trim();
+    const [h, m] = timePart.split(':').map(Number);
+    hours = isPM && h !== 12 ? h + 12 : (!isPM && h === 12 ? 0 : h);
+    minutes = m || 0;
+  } else {
+    const [h, m] = windowStart.split(':').map(Number);
+    hours = h;
+    minutes = m || 0;
+  }
+  date.setHours(hours, minutes, 0, 0);
+  date.setMinutes(date.getMinutes() - offsetMinutes);
+  return date.toISOString();
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
