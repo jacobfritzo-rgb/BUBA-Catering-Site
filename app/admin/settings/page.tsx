@@ -73,16 +73,39 @@ export default function Settings() {
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testMsg, setTestMsg] = useState("");
+  const [businessHours, setBusinessHours] = useState("");
+  const [isSavingHours, setIsSavingHours] = useState(false);
+  const [hoursMsg, setHoursMsg] = useState("");
 
   useEffect(() => {
     Promise.all([
       fetch("/api/email-settings").then(r => r.json()),
       fetch("/api/email-templates").then(r => r.json()),
-    ]).then(([s, t]) => {
+      fetch("/api/site-settings").then(r => r.json()),
+    ]).then(([s, t, site]) => {
       setSettings(s);
       setTemplates(t);
+      setBusinessHours(site.business_hours || "");
     });
   }, []);
+
+  const saveBusinessHours = async () => {
+    setIsSavingHours(true);
+    setHoursMsg("");
+    try {
+      const res = await fetch("/api/site-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "business_hours", value: businessHours }),
+      });
+      setHoursMsg(res.ok ? "Hours saved!" : "Failed to save.");
+    } catch {
+      setHoursMsg("Error saving hours.");
+    } finally {
+      setIsSavingHours(false);
+      setTimeout(() => setHoursMsg(""), 3000);
+    }
+  };
 
   const currentTemplate = templates.find(t => t.trigger_name === activeTemplate);
 
@@ -175,6 +198,39 @@ export default function Settings() {
           >
             Back to Dashboard
           </button>
+        </div>
+
+        {/* SECTION 0: Business Hours */}
+        <div className="border-4 border-black p-6 mb-8">
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-1">Business Hours</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Displayed in the footer on the customer-facing site. Update this whenever your hours change — no developer needed.
+          </p>
+          <label className="block text-sm font-black uppercase tracking-wide mb-1">Hours</label>
+          <input
+            type="text"
+            value={businessHours}
+            onChange={(e) => setBusinessHours(e.target.value)}
+            placeholder="e.g. Wed–Sun, 10am–7pm"
+            className="w-full px-3 py-2 border-2 border-black text-sm font-medium mb-4"
+          />
+          <p className="text-xs text-gray-500 mb-4">
+            Tip: Use a dash (–) between days and a comma before the time range. Example: <strong>Wed–Sun, 10am–7pm</strong>
+          </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={saveBusinessHours}
+              disabled={isSavingHours}
+              className="bg-[#E10600] text-white font-black px-6 py-3 uppercase tracking-tight border-4 border-[#E10600] hover:bg-black hover:border-black transition-colors disabled:opacity-50"
+            >
+              {isSavingHours ? "Saving..." : "Save Hours"}
+            </button>
+            {hoursMsg && (
+              <span className={`text-sm font-black ${hoursMsg.includes("saved") ? "text-green-600" : "text-red-600"}`}>
+                {hoursMsg}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* SECTION 1: Event Notification Recipients */}

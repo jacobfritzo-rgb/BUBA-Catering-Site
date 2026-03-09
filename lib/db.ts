@@ -219,6 +219,20 @@ export async function initDb() {
       )
     `);
 
+    // Create site_settings table for editable business settings
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS site_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+
+    // Seed default site settings
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)",
+      args: ["business_hours", "Wed–Sun, 10am–7pm"],
+    });
+
     // Seed party-box image from static file if not already in DB
     const partyBoxResult = await db.execute(
       "SELECT key FROM product_images WHERE key = 'party-box'"
@@ -374,6 +388,24 @@ export async function initDb() {
           args: [migratedBody],
         });
         console.log('Migrated new_order customer email template to simplified format');
+      }
+    }
+
+    // Migrate new_order customer template: force-update if it doesn't include Fritz's contact info
+    // This ensures the template always has the latest content with phone number, order ID, and next steps.
+    const newOrderContactCheck = await db.execute({
+      sql: "SELECT customer_body_html FROM email_templates WHERE trigger_name = 'new_order'",
+      args: [],
+    });
+    if (newOrderContactCheck.rows.length > 0) {
+      const currentBody = String(newOrderContactCheck.rows[0].customer_body_html ?? '');
+      if (!currentBody.includes('301-518-7166')) {
+        const updatedBody = `<p>Hi {{customer_name}},</p><p>Thanks for reaching out to BUBA Catering! We received your order request and will be in touch within 24 hours to confirm availability and walk you through next steps.</p><p><strong>Your order number is #{{order_id}}</strong> — keep this handy in case you need to reference it.</p><p><strong>{{fulfillment_type}}</strong> on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}<p><strong>Estimated subtotal:</strong> {{subtotal}}</p>{{price_estimate_note}}{{delivery_note}}<p><strong>What happens next:</strong> We review every order personally. Once approved, you'll receive a confirmation email and a Toast invoice to complete payment. We do not charge anything until your order is confirmed.</p><p>Have a question in the meantime? Call or text Fritz at <strong>301-518-7166</strong> or reply to this email.</p><p>— Fritz &amp; the BUBA Catering Team<br/>193 Bleecker St., New York, NY 10012</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'new_order'",
+          args: [updatedBody],
+        });
+        console.log('Updated new_order customer email template with contact info');
       }
     }
 

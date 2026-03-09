@@ -208,15 +208,32 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
   return (
     <div className="space-y-8">
       {/* Requirements banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm font-semibold text-blue-800 mb-2">Photo requirements</p>
-        <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-          <li><strong>Formats:</strong> JPG, PNG, WebP, or HEIC — iPhone photos work perfectly</li>
-          <li><strong>Max size:</strong> 5 MB per photo</li>
-          <li><strong>Best dimensions:</strong> landscape or square, at least 800 × 600 px</li>
-          <li><strong>Ideal ratio:</strong> 4:3 or 1:1 for product photos; any ratio for event gallery</li>
-          <li>Avoid screenshots or heavily compressed images — use original camera photos</li>
-        </ul>
+      <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-5">
+        <p className="text-sm font-black uppercase tracking-wide text-blue-900 mb-3">Photo Upload Guide</p>
+        <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
+          <div>
+            <p className="font-bold mb-1">Best file formats (in order of preference):</p>
+            <ol className="list-decimal list-inside space-y-1 text-blue-700">
+              <li><strong>JPEG / JPG</strong> — best for food photos. Smallest file, great quality. ✅ Recommended</li>
+              <li><strong>HEIC</strong> — default iPhone format, uploads fine</li>
+              <li><strong>WebP</strong> — modern format, also great</li>
+              <li><strong>PNG</strong> — works, but file sizes are larger than needed for photos</li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-bold mb-1">Size and dimensions:</p>
+            <ul className="list-disc list-inside space-y-1 text-blue-700">
+              <li><strong>Max file size:</strong> 5 MB per photo</li>
+              <li><strong>Min dimensions:</strong> 800 × 600 px (larger is fine)</li>
+              <li><strong>Best ratio:</strong> 4:3 or square for product shots</li>
+              <li>iPhone camera photos work perfectly — upload directly from your phone</li>
+              <li>Avoid screenshots — use actual camera photos for best quality</li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-xs text-blue-600 mt-3 border-t border-blue-200 pt-2">
+          💡 <strong>Tip:</strong> If your photo is over 5 MB, use a free tool like <strong>squoosh.app</strong> to compress it before uploading. Aim for under 2 MB for fastest page loads.
+        </p>
       </div>
 
       {success && (

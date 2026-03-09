@@ -44,6 +44,7 @@ export default function OrderForm() {
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [emailOptIn, setEmailOptIn] = useState(false);
   const [servesCount, setServesCount] = useState<number | "">("");
+  const [businessHours, setBusinessHours] = useState<string>("");
 
   const DELIVERY_FEE = 0;
 
@@ -57,6 +58,10 @@ export default function OrderForm() {
       .then((res) => res.json())
       .then((data) => setFlavors(data))
       .catch((err) => console.error("Error fetching flavors:", err));
+    fetch("/api/site-settings")
+      .then((res) => res.json())
+      .then((data) => setBusinessHours(data.business_hours || ""))
+      .catch(() => {});
   }, []);
 
   // ─── Box / Flavor management ───────────────────────────────────────────────
@@ -946,6 +951,9 @@ export default function OrderForm() {
         <div className="max-w-2xl mx-auto">
           <p className="font-black text-xl uppercase tracking-tight mb-2">BUBA CATERING</p>
           <p className="text-gray-300 text-sm">193 Bleecker St., New York, NY 10012</p>
+          {businessHours && (
+            <p className="text-gray-400 text-sm mt-1">{businessHours}</p>
+          )}
         </div>
       </footer>
     </div>
