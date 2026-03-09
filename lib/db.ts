@@ -230,7 +230,13 @@ export async function initDb() {
     // Seed default site settings
     await db.execute({
       sql: "INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)",
-      args: ["business_hours", "Wed–Sun, 10am–7pm"],
+      args: ["business_hours", "Wed–Fri 8am–2:30pm · Sat–Sun 9am–3:30pm"],
+    });
+
+    // Migrate business_hours if it still has the old placeholder value
+    await db.execute({
+      sql: "UPDATE site_settings SET value = ? WHERE key = 'business_hours' AND value = ?",
+      args: ["Wed–Fri 8am–2:30pm · Sat–Sun 9am–3:30pm", "Wed–Sun, 10am–7pm"],
     });
 
     // Seed party-box image from static file if not already in DB

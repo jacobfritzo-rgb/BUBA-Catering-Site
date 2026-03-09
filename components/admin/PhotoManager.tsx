@@ -28,8 +28,8 @@ const EVENT_PHOTOS: ProductPhoto[] = [
   { key: "event-4", label: "Event Photo 4", description: "Party, office gathering, celebration…" },
 ];
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+const MAX_BYTES = 50 * 1024 * 1024; // 50 MB — server compresses automatically
 
 interface UploadedImage {
   key: string;
@@ -65,12 +65,13 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
     clearCardError(key);
     setSuccess(null);
 
-    if (!ACCEPTED_TYPES.includes(file.type) && !file.name.toLowerCase().endsWith(".heic")) {
-      setCardError(key, `Unsupported format "${file.type || file.name.split(".").pop()}". Use JPG, PNG, WebP, or HEIC.`);
+    const isHeic = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif");
+    if (!ACCEPTED_TYPES.includes(file.type) && !isHeic) {
+      setCardError(key, `Unsupported format. Use JPG, PNG, WebP, or HEIC.`);
       return;
     }
     if (file.size > MAX_BYTES) {
-      setCardError(key, `File is ${formatBytes(file.size)} — must be under 5 MB. Try compressing the image first.`);
+      setCardError(key, `File is ${formatBytes(file.size)} — must be under 50 MB.`);
       return;
     }
 
@@ -145,7 +146,10 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
           )}
           {isUploading && (
             <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
-              <div className="text-white font-semibold text-sm">Uploading…</div>
+              <div className="text-white font-semibold text-sm text-center px-2">
+                Compressing &amp; uploading…<br />
+                <span className="text-xs opacity-75">Large files may take a moment</span>
+              </div>
             </div>
           )}
         </div>
@@ -165,7 +169,7 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
             <input
               ref={(el) => { fileInputRefs.current[product.key] = el; }}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,.heic"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -178,7 +182,7 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
               disabled={isUploading || isDeleting}
               className="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {isUploading ? "Uploading…" : imageExists ? "Replace" : "Upload Photo"}
+              {isUploading ? "Compressing…" : imageExists ? "Replace" : "Upload Photo"}
             </button>
             {imageExists && (
               <button
@@ -212,27 +216,28 @@ export default function PhotoManager({ uploadedImages, onUpdate }: PhotoManagerP
         <p className="text-sm font-black uppercase tracking-wide text-blue-900 mb-3">Photo Upload Guide</p>
         <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
           <div>
-            <p className="font-bold mb-1">Best file formats (in order of preference):</p>
-            <ol className="list-decimal list-inside space-y-1 text-blue-700">
-              <li><strong>JPEG / JPG</strong> — best for food photos. Smallest file, great quality. ✅ Recommended</li>
-              <li><strong>HEIC</strong> — default iPhone format, uploads fine</li>
-              <li><strong>WebP</strong> — modern format, also great</li>
-              <li><strong>PNG</strong> — works, but file sizes are larger than needed for photos</li>
-            </ol>
+            <p className="font-bold mb-1">Accepted formats:</p>
+            <ul className="list-disc list-inside space-y-1 text-blue-700">
+              <li><strong>HEIC</strong> — iPhone default, any size ✅</li>
+              <li><strong>JPEG / JPG</strong> — great for food photos ✅</li>
+              <li><strong>PNG, WebP</strong> — also accepted ✅</li>
+            </ul>
+            <p className="text-blue-600 text-xs mt-2">
+              All photos are automatically compressed and converted before display. Upload straight from your camera roll — no prep needed.
+            </p>
           </div>
           <div>
             <p className="font-bold mb-1">Size and dimensions:</p>
             <ul className="list-disc list-inside space-y-1 text-blue-700">
-              <li><strong>Max file size:</strong> 5 MB per photo</li>
-              <li><strong>Min dimensions:</strong> 800 × 600 px (larger is fine)</li>
+              <li><strong>Max upload:</strong> 50 MB (auto-compressed on upload)</li>
+              <li><strong>Recommended:</strong> at least 800 × 600 px</li>
               <li><strong>Best ratio:</strong> 4:3 or square for product shots</li>
-              <li>iPhone camera photos work perfectly — upload directly from your phone</li>
-              <li>Avoid screenshots — use actual camera photos for best quality</li>
+              <li>Avoid screenshots — use original camera photos</li>
             </ul>
           </div>
         </div>
         <p className="text-xs text-blue-600 mt-3 border-t border-blue-200 pt-2">
-          💡 <strong>Tip:</strong> If your photo is over 5 MB, use a free tool like <strong>squoosh.app</strong> to compress it before uploading. Aim for under 2 MB for fastest page loads.
+          Large HEIC files from iPhone are supported — the site compresses them automatically. The button will say "Compressing…" while it works, which can take 5–15 seconds for a large file.
         </p>
       </div>
 
