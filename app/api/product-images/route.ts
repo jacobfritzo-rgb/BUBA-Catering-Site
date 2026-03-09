@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
+import sharp from "sharp";
 
 // POST: Upload and auto-compress a product image (admin only)
 // Accepts any image format including HEIC up to 50 MB.
@@ -41,8 +42,6 @@ export async function POST(request: NextRequest) {
     let outputType = "image/jpeg";
 
     try {
-      const sharp = (await import("sharp")).default;
-
       compressed = await sharp(buffer)
         .rotate()                                                      // respect EXIF rotation
         .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
@@ -58,11 +57,11 @@ export async function POST(request: NextRequest) {
           .toBuffer();
       }
     } catch (err) {
-      // Sharp unavailable — fall back to storing original (must be under 5 MB)
-      console.error("sharp compression unavailable, storing original:", err);
+      // Compression failed — fall back to storing original (must be under 5 MB)
+      console.error("sharp compression failed, storing original:", err);
       if (buffer.length > 5 * 1024 * 1024) {
         return NextResponse.json(
-          { error: "Auto-compression unavailable. Try a file under 5 MB, or convert HEIC to JPEG first." },
+          { error: "Auto-compression failed. Try a file under 5 MB, or convert HEIC to JPEG first." },
           { status: 400 }
         );
       }
