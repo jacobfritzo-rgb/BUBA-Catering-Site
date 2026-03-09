@@ -6,6 +6,7 @@ import ProductShowcase from "./ProductShowcase";
 import PortionCalculator from "./PortionCalculator";
 import EventPhotos from "./EventPhotos";
 import FAQ from "./FAQ";
+import ContactForm from "./ContactForm";
 import BoxConfigurator from "./BoxConfigurator";
 import AddonsSelector from "./AddonsSelector";
 import { Flavor, OrderItem, CreateOrderRequest } from "@/lib/types";
@@ -530,6 +531,14 @@ export default function OrderForm() {
                   </select>
                 </div>
 
+                {/* Pickup address */}
+                {fulfillmentType === "pickup" && (
+                  <div className="mb-4 bg-gray-50 border-2 border-gray-300 px-4 py-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">PICKUP LOCATION</p>
+                    <p className="text-sm font-bold text-black">193 Bleecker St., New York, NY 10012</p>
+                  </div>
+                )}
+
                 {/* Delivery-specific fields */}
                 {fulfillmentType === "delivery" && (
                   <>
@@ -812,24 +821,29 @@ export default function OrderForm() {
                       />
                     </div>
 
-                    <div className="space-y-2 pt-2 border-t-2 border-black mt-4">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={smsOptIn}
-                          onChange={(e) => setSmsOptIn(e.target.checked)}
-                          className="w-5 h-5 border-2 border-black"
-                        />
-                        <span className="text-sm font-bold uppercase tracking-wide text-black">
-                          TEXT ME ABOUT FUTURE DROPS
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2">
+                    <div className="space-y-3 pt-2 border-t-2 border-black mt-4">
+                      <div>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={smsOptIn}
+                            onChange={(e) => setSmsOptIn(e.target.checked)}
+                            className="w-5 h-5 border-2 border-black flex-shrink-0 mt-0.5"
+                          />
+                          <span className="text-sm font-bold uppercase tracking-wide text-black">
+                            TEXT ME ABOUT FUTURE DROPS
+                          </span>
+                        </label>
+                        <p className="text-xs text-gray-500 mt-1 ml-7 leading-relaxed">
+                          By checking this box, you consent to receive recurring automated marketing text messages from BUBA Catering at the phone number provided above. Consent is not a condition of purchase. Msg &amp; data rates may apply. Message frequency varies. Reply <strong>STOP</strong> to unsubscribe. Reply <strong>HELP</strong> for help.
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={emailOptIn}
                           onChange={(e) => setEmailOptIn(e.target.checked)}
-                          className="w-5 h-5 border-2 border-black"
+                          className="w-5 h-5 border-2 border-black flex-shrink-0"
                         />
                         <span className="text-sm font-bold uppercase tracking-wide text-black">
                           EMAIL ME ABOUT FUTURE DROPS
@@ -921,8 +935,19 @@ export default function OrderForm() {
         </div>
       </div>
 
+      {/* Contact / Inquiry Form */}
+      <ContactForm />
+
       {/* FAQ Section */}
       <FAQ />
+
+      {/* Footer */}
+      <footer className="bg-black text-white py-10 px-4 text-center">
+        <div className="max-w-2xl mx-auto">
+          <p className="font-black text-xl uppercase tracking-tight mb-2">BUBA CATERING</p>
+          <p className="text-gray-300 text-sm">193 Bleecker St., New York, NY 10012</p>
+        </div>
+      </footer>
     </div>
   );
 }

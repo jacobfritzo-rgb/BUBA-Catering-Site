@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/api-auth";
 import { createClient } from "@libsql/client";
 
 const turso = createClient({
@@ -18,7 +19,10 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   try {
     const { question, answer } = await request.json();
 
@@ -40,7 +44,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   try {
     const { id, question, answer, display_order } = await request.json();
 
@@ -56,7 +63,10 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
+  const authError = await requireAdmin(request);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

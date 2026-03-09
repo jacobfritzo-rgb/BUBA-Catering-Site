@@ -4,6 +4,9 @@ import { CreateOrderRequest, OrderStatus } from "@/lib/types";
 import { sendNewOrderNotification } from "@/lib/email";
 import { requireAdmin } from "@/lib/api-auth";
 
+// In-memory rate limiter: 5 submissions per IP per hour
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
 // Helper to validate order date (pickup or delivery)
 function validateOrderDate(orderDate: string): string | null {
   // Parse as local date (server timezone) to avoid UTC date-shift
@@ -61,6 +64,19 @@ function calculateBakeDeadline(orderDate: string, windowStart: string, offsetMin
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  if (record && now < record.resetAt) {
+    if (record.count >= 5) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+    }
+    record.count++;
+  } else {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
+  }
+
   await initDb();
 
   try {

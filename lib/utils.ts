@@ -41,13 +41,28 @@ export function getFulfillmentTime(order: Order): string {
 }
 
 /**
+ * Format a 24-hour time string to 12-hour AM/PM format
+ * @example formatTime12h("14:00") => "2:00 PM"
+ */
+function formatTime12h(time: string): string {
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+/**
  * Get fulfillment time range (for delivery, returns window; for pickup, returns single time)
+ * Returns 12-hour AM/PM format.
  */
 export function getFulfillmentTimeDisplay(order: Order): string {
   if (order.fulfillment_type === 'delivery') {
-    return `${order.delivery_window_start || ''}-${order.delivery_window_end || ''}`;
+    const start = formatTime12h(order.delivery_window_start || '');
+    const end = formatTime12h(order.delivery_window_end || '');
+    return `${start}–${end}`;
   }
-  return order.pickup_time || '';
+  return formatTime12h(order.pickup_time || '');
 }
 
 /**
