@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { Order, OrderNote, OrderItem } from "@/lib/types";
 import { getMinOrderDate } from "@/lib/utils";
 
-// Generate time slots 10:00–19:00 in 30-min increments (same as OrderForm)
+// Generate time slots 8:30 AM – 4:30 PM in 30-min increments (same as OrderForm)
 const TIME_SLOTS: string[] = [];
-for (let hour = 10; hour < 19; hour++) {
-  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:00`);
-  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:30`);
+let _slotHour = 8, _slotMin = 30;
+while (_slotHour < 16 || (_slotHour === 16 && _slotMin <= 30)) {
+  TIME_SLOTS.push(`${_slotHour.toString().padStart(2, "0")}:${_slotMin.toString().padStart(2, "0")}`);
+  _slotMin += 30;
+  if (_slotMin >= 60) { _slotMin -= 60; _slotHour += 1; }
 }
-TIME_SLOTS.push("19:00");
 
 interface EditBox {
   id: string;
@@ -432,10 +433,16 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
     text += `Total: $${(order.total_price / 100).toFixed(2)}\n\n`;
 
     if (order.fulfillment_type === "delivery") {
-      text += `Delivery: ${new Date(order.delivery_date! + 'T00:00:00').toLocaleDateString()} ${order.delivery_window_start}-${order.delivery_window_end} to ${order.delivery_address}\n`;
+      const windowStr = order.delivery_window_start === "custom"
+        ? `Custom: ${order.order_data?.custom_time_request || "—"}`
+        : `${order.delivery_window_start}-${order.delivery_window_end}`;
+      text += `Delivery: ${new Date(order.delivery_date! + 'T00:00:00').toLocaleDateString()} ${windowStr} to ${order.delivery_address}\n`;
       text += `Notes: ${order.delivery_notes || "None"}`;
     } else {
-      text += `Pickup: ${new Date(order.pickup_date! + 'T00:00:00').toLocaleDateString()} at ${order.pickup_time}\n`;
+      const pickupTimeStr = order.pickup_time === "custom"
+        ? `Custom: ${order.order_data?.custom_time_request || "—"}`
+        : order.pickup_time;
+      text += `Pickup: ${new Date(order.pickup_date! + 'T00:00:00').toLocaleDateString()} at ${pickupTimeStr}\n`;
       text += `Notes: ${order.delivery_notes || "None"}`;
     }
 
@@ -574,9 +581,10 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                     onChange={(e) => setEditTimeStart(e.target.value)}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white"
                   >
-                    {TIME_SLOTS.filter((t) => editFulfillmentType === "pickup" || t !== "19:00").map((t) => (
+                    {TIME_SLOTS.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
+                    <option value="custom">custom (see order notes)</option>
                   </select>
                 </div>
               </div>
@@ -775,7 +783,10 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
           {order.fulfillment_type === "delivery" ? (
             <>
               <p className="text-sm text-gray-600">
-                <span className="font-medium">Customer window:</span> {order.delivery_window_start} – {order.delivery_window_end}
+                <span className="font-medium">Customer window:</span>{" "}
+                {order.delivery_window_start === "custom"
+                  ? <span className="text-orange-700 font-semibold">Custom: {order.order_data?.custom_time_request || "—"}</span>
+                  : `${order.delivery_window_start} – ${order.delivery_window_end}`}
               </p>
               {order.metrospeedy_pickup_time && (
                 <p className="text-sm font-semibold text-orange-700">
@@ -784,7 +795,11 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
               )}
             </>
           ) : (
-            <p className="text-sm text-gray-600">{order.pickup_time}</p>
+            <p className="text-sm text-gray-600">
+              {order.pickup_time === "custom"
+                ? <span className="text-orange-700 font-semibold">Custom: {order.order_data?.custom_time_request || "—"}</span>
+                : order.pickup_time}
+            </p>
           )}
           {order.fulfillment_type === "delivery" && order.delivery_address && (
             <p className="text-sm text-gray-600">{order.delivery_address}</p>

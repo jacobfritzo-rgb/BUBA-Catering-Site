@@ -20,11 +20,11 @@ export default function BoxConfigurator({
   onRemove,
 }: BoxConfiguratorProps) {
   const maxFlavors = type === "party_box" ? 3 : 4; // Party Box: 3 max, Big Box: 4 max
-  const boxName = type === "party_box" ? "PARTY BOX" : "BIG BOX";
+  const boxName = type === "party_box" ? "PARTY BOX" : "4-PACK";
   const price = type === "party_box" ? "$225" : "$78";
   const description = type === "party_box"
-    ? "Serves 10-15 people • 40 mini burekas • Crushed tomato, tahini, schug, pickles, olives"
-    : "Feeds 4-6 people • 8 half-size burekas • Tahini, crushed tomato, schug, pickles, olives, jammy eggs";
+    ? "Serves 10-15 people • 40 mini burekas • Crushed tomato, tahini, spicy schug, pickles, olives"
+    : "Feeds 4-6 people • 4 burekas, chopped in half • Crushed tomato, tahini, spicy schug, pickles, olives, jammy eggs";
 
   const selectedCount = selectedFlavors.length;
   const isComplete = selectedCount >= 1 && selectedCount <= maxFlavors;

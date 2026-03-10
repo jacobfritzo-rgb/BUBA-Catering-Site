@@ -51,7 +51,10 @@ async function sendEmail(
 function buildVariables(order: Order, productionSheetHTML?: string): Record<string, string> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://buba-catering-site-production.up.railway.app';
   const fulfillmentDate = getFulfillmentDate(order);
-  const fulfillmentTime = getFulfillmentTimeDisplay(order);
+  const rawFulfillmentTime = getFulfillmentTimeDisplay(order);
+  const fulfillmentTime = rawFulfillmentTime === 'Custom time requested' && order.order_data?.custom_time_request
+    ? `Custom: ${order.order_data.custom_time_request}`
+    : rawFulfillmentTime;
 
   const itemsHtml = order.order_data.items.map(item => `
     <p><strong>${item.type === 'party_box' ? 'Party Box' : 'Big Box'}</strong></p>
@@ -86,7 +89,7 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     ? deliveryFeeCents > 0
       ? '<p><em>Your delivery fee has been confirmed and is included in the total above.</em></p>'
       : '<p><em>Note: The delivery fee will be confirmed separately and is not included in the estimated subtotal above.</em></p>'
-    : '<p><em>Note: This is an estimated total. Final pricing will be confirmed when we review your order.</em></p>';
+    : '<p><em>Note: This is an estimated total. Final pricing will be confirmed once we have reviewed your order.</em></p>';
 
   // Used in approval email: shows the correct pricing breakdown depending on whether fee is set
   let feeBreakdownHtml: string;

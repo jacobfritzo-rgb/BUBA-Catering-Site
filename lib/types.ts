@@ -24,6 +24,7 @@ export interface OrderData {
   items: OrderItem[];
   addons: Addon[];
   serves_count?: number;
+  custom_time_request?: string;
 }
 
 export interface Order {

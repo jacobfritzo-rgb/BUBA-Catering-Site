@@ -438,6 +438,116 @@ export async function initDb() {
       }
     }
 
+    // === BRAND UPDATE MIGRATIONS: BUBA Catering → BUBA BUREKA Catering ===
+
+    // new_order: update signature from "Fritz & the BUBA Catering Team" → "BUBA BUREKA Catering"
+    const newOrderBrandCheck = await db.execute({
+      sql: "SELECT customer_body_html FROM email_templates WHERE trigger_name = 'new_order'",
+      args: [],
+    });
+    if (newOrderBrandCheck.rows.length > 0) {
+      const currentBody = String(newOrderBrandCheck.rows[0].customer_body_html ?? '');
+      if (currentBody.includes('the BUBA Catering Team') && !currentBody.includes('BUREKA')) {
+        const updatedBody = `<p>Hi {{customer_name}},</p><p>Thanks for reaching out to BUBA BUREKA Catering! We received your order request and will be in touch within 24 hours to confirm availability and walk you through next steps.</p><p><strong>Your order number is #{{order_id}}</strong> — keep this handy in case you need to reference it.</p><p><strong>{{fulfillment_type}}</strong> on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p>{{items_html_simple}}<p><strong>Estimated subtotal:</strong> {{subtotal}}</p>{{price_estimate_note}}{{delivery_note}}<p><strong>What happens next:</strong> We review every order personally. Once approved, you'll receive a confirmation email and a Toast invoice to complete payment. We do not charge anything until your order is confirmed.</p><p>Have a question in the meantime? Call or text Fritz at <strong>301-518-7166</strong> or reply to this email.</p><p>— BUBA BUREKA Catering<br/>193 Bleecker St., New York, NY 10012</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'new_order'",
+          args: [updatedBody],
+        });
+        console.log('Updated new_order customer email: brand → BUBA BUREKA Catering');
+      }
+    }
+
+    // order_approved: update signature "The BUBA Team" → "The BUBA BUREKA Team"
+    const approvedBrandCheck = await db.execute({
+      sql: "SELECT customer_body_html FROM email_templates WHERE trigger_name = 'order_approved'",
+      args: [],
+    });
+    if (approvedBrandCheck.rows.length > 0) {
+      const currentBody = String(approvedBrandCheck.rows[0].customer_body_html ?? '');
+      if (currentBody.includes('— The BUBA Team') && !currentBody.includes('BUREKA')) {
+        const updatedBody = currentBody.replace('— The BUBA Team', '— The BUBA BUREKA Team');
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_body_html = ? WHERE trigger_name = 'order_approved'",
+          args: [updatedBody],
+        });
+        console.log('Updated order_approved customer email: signature → The BUBA BUREKA Team');
+      }
+    }
+
+    // order_rejected: update subject, add team@bubabureka.com contact, update brand + signature
+    const rejectedBrandCheck = await db.execute({
+      sql: "SELECT customer_subject, customer_body_html FROM email_templates WHERE trigger_name = 'order_rejected'",
+      args: [],
+    });
+    if (rejectedBrandCheck.rows.length > 0) {
+      const currentBody = String(rejectedBrandCheck.rows[0].customer_body_html ?? '');
+      if (!currentBody.includes('bubabureka.com')) {
+        const updatedSubject = 'Regarding your BUBA BUREKA Catering order #{{order_id}}';
+        const updatedBody = `<p>Hi {{customer_name}},</p><p>Thank you for your interest in BUBA Catering. Unfortunately, we're unable to fulfill your order at this time.</p><p>{{rejection_reason}}</p><p>We hope to serve you in the future. Please don't hesitate to reach out via email to <a href="mailto:team@bubabureka.com">team@bubabureka.com</a> with any questions.</p><p>— The BUBA BUREKA Team</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_subject = ?, customer_body_html = ? WHERE trigger_name = 'order_rejected'",
+          args: [updatedSubject, updatedBody],
+        });
+        console.log('Updated order_rejected customer email: brand + contact info');
+      }
+    }
+
+    // delivery_fee_confirmed: remove "Great news" opener, update brand in subject + body
+    const deliveryFeeBrandCheck = await db.execute({
+      sql: "SELECT customer_subject, customer_body_html FROM email_templates WHERE trigger_name = 'delivery_fee_confirmed'",
+      args: [],
+    });
+    if (deliveryFeeBrandCheck.rows.length > 0) {
+      const currentBody = String(deliveryFeeBrandCheck.rows[0].customer_body_html ?? '');
+      const currentSubject = String(deliveryFeeBrandCheck.rows[0].customer_subject ?? '');
+      if (currentBody.includes('Great news') || !currentSubject.includes('BUREKA')) {
+        const updatedSubject = 'Your BUBA BUREKA Catering delivery fee is confirmed — Order #{{order_id}}';
+        const updatedBody = `<p>Hi {{customer_name}},</p><p>Your delivery fee has been confirmed!</p><p><strong>Order #{{order_id}}</strong> | {{fulfillment_type}} on {{fulfillment_date_formatted}} at {{fulfillment_time}}</p><p>Subtotal: {{subtotal}}<br/>Delivery fee: {{delivery_fee_display}}<br/><strong>Total: {{total}}</strong></p><p>You'll receive an invoice from <strong>Toast</strong> shortly with your final total.</p><p>Thank you for choosing BUBA BUREKA Catering!</p><p>— The BUBA Team</p>`;
+        await db.execute({
+          sql: "UPDATE email_templates SET customer_subject = ?, customer_body_html = ? WHERE trigger_name = 'delivery_fee_confirmed'",
+          args: [updatedSubject, updatedBody],
+        });
+        console.log('Updated delivery_fee_confirmed customer email: removed "Great news", updated brand');
+      }
+    }
+
+    // === FAQ MIGRATIONS: 72h → 48h, Big Box → 4-Pack ===
+    const faqRows = await db.execute("SELECT id, display_order, answer FROM faqs ORDER BY display_order ASC");
+    for (const row of faqRows.rows) {
+      const answer = String(row.answer ?? '');
+      const displayOrder = Number(row.display_order);
+
+      // FAQ 1: 72h → 48h advance notice, "require" → "recommend", update recommendation
+      if (displayOrder === 1 && (answer.includes('72 hours') || answer.includes('require at least'))) {
+        const updatedAnswer = 'We recommend at least 48 hours (2 days) advance notice for all catering orders. This ensures we have enough time to prepare your burekas perfectly. For larger orders or weekend events, we recommend ordering a week in advance.';
+        await db.execute({
+          sql: "UPDATE faqs SET answer = ? WHERE id = ?",
+          args: [updatedAnswer, row.id],
+        });
+        console.log('Updated FAQ 1: 72h → 48h advance notice');
+      }
+
+      // FAQ 2 & 3: Big Box → 4-Pack
+      if ((displayOrder === 2 || displayOrder === 3) && answer.includes('Big Box')) {
+        const updatedAnswer = answer.replace(/Big Boxes/g, '4-Packs').replace(/Big Box/g, '4-Pack');
+        await db.execute({
+          sql: "UPDATE faqs SET answer = ? WHERE id = ?",
+          args: [updatedAnswer, row.id],
+        });
+        console.log(`Updated FAQ ${displayOrder}: Big Box → 4-Pack`);
+      }
+
+      // FAQ 4: remove "within 24 hours" from the delivery quote confirmation line
+      if (displayOrder === 4 && answer.includes('within 24 hours')) {
+        const updatedAnswer = answer.replace(/ within 24 hours/g, '');
+        await db.execute({
+          sql: "UPDATE faqs SET answer = ? WHERE id = ?",
+          args: [updatedAnswer, row.id],
+        });
+        console.log('Updated FAQ 4: removed "within 24 hours" from delivery quote line');
+      }
+    }
+
     isInitialized = true;
   } catch (error) {
     console.error("Database initialization error:", error);

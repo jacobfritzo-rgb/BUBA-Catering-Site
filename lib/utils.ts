@@ -46,6 +46,7 @@ export function getFulfillmentTime(order: Order): string {
  */
 function formatTime12h(time: string): string {
   if (!time) return '';
+  if (time === 'custom') return 'Custom time requested';
   const [h, m] = time.split(':').map(Number);
   const period = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
@@ -75,11 +76,11 @@ export function isMonOrTue(dateString: string): boolean {
 }
 
 /**
- * Get minimum order date (72 hours from now, expressed as a local date string).
+ * Get minimum order date (48 hours from now, expressed as a local date string).
  * Uses local date parts to avoid UTC off-by-one when client is behind UTC.
  */
 export function getMinOrderDate(): string {
-  const min = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  const min = new Date(Date.now() + 48 * 60 * 60 * 1000);
   const y = min.getFullYear();
   const m = String(min.getMonth() + 1).padStart(2, '0');
   const d = String(min.getDate()).padStart(2, '0');

@@ -114,7 +114,7 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
             {/* Number of people */}
             <div>
               <label className="block font-black uppercase text-sm mb-2">
-                How many people are you feeding?
+                How many people are eating burekas?
               </label>
               <input
                 type="number"
@@ -177,7 +177,7 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
                 <div className="bg-gray-50 p-4 border-2 border-black">
                   <p className="font-black uppercase text-xs mb-2 text-[#E10600]">Recommended</p>
                   <p className="text-2xl font-black text-[#E10600] mb-1">{recLabel(recommended)}</p>
-                  <p className="text-sm font-medium mb-3">Estimated total: ${recCost(recommended)}</p>
+                  <p className="text-sm font-medium mb-3">Estimated total (excl. tax): ${recCost(recommended)}</p>
                   {onAddToOrder && (
                     <button
                       type="button"
@@ -198,7 +198,7 @@ export default function PortionCalculator({ onAddToOrder }: PortionCalculatorPro
                   <div className="bg-gray-50 p-4 border-2 border-gray-300">
                     <p className="font-black uppercase text-xs mb-2 text-gray-500">Alternative Option</p>
                     <p className="text-2xl font-black text-gray-700 mb-1">{recLabel(alternate)}</p>
-                    <p className="text-sm font-medium mb-3">Estimated total: ${recCost(alternate)}</p>
+                    <p className="text-sm font-medium mb-3">Estimated total (excl. tax): ${recCost(alternate)}</p>
                     {onAddToOrder && (
                       <button
                         type="button"

@@ -31,7 +31,7 @@ export default function EventPhotos() {
             BUBA at Your Event
           </h2>
           <p className="text-sm font-medium uppercase tracking-wide">
-            Fresh burekas make any gathering special
+            Everyone will love you if you serve burekas!
           </p>
         </div>
 

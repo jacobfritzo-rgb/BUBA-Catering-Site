@@ -68,7 +68,7 @@ export default function ContactForm() {
             Have a Question?
           </h2>
           <p className="text-sm font-medium text-gray-600">
-            Not ready to order? Send us a message and we&apos;ll get back to you.
+            Not ready to order? Send us a message with your questions and we&apos;ll get back to you.
           </p>
         </div>
 

@@ -18,13 +18,21 @@ interface Box {
   flavors: string[];
 }
 
-// Generate time slots from 10:00 to 19:00 in 30-min increments
+// Generate standard time slots: 8:30 AM – 4:30 PM in 30-min increments
 const TIME_SLOTS: string[] = [];
-for (let hour = 10; hour < 19; hour++) {
-  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:00`);
-  TIME_SLOTS.push(`${hour.toString().padStart(2, "0")}:30`);
+let _slotHour = 8, _slotMin = 30;
+while (_slotHour < 16 || (_slotHour === 16 && _slotMin <= 30)) {
+  TIME_SLOTS.push(`${_slotHour.toString().padStart(2, "0")}:${_slotMin.toString().padStart(2, "0")}`);
+  _slotMin += 30;
+  if (_slotMin >= 60) { _slotMin -= 60; _slotHour += 1; }
 }
-TIME_SLOTS.push("19:00");
+
+function to12h(time24: string): string {
+  const [h, m] = time24.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+}
 
 export default function OrderForm() {
   const [flavors, setFlavors] = useState<Flavor[]>([]);
@@ -38,7 +46,8 @@ export default function OrderForm() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"pickup" | "delivery">("pickup");
   const [orderDate, setOrderDate] = useState("");
-  const [orderWindowStart, setOrderWindowStart] = useState("14:00");
+  const [orderWindowStart, setOrderWindowStart] = useState("10:00");
+  const [customTimeRequest, setCustomTimeRequest] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
@@ -126,6 +135,8 @@ export default function OrderForm() {
 
   const validateStep1 = (): string | null => {
     if (!orderDate) return "Please select a date for your event";
+    if (orderWindowStart === "custom" && !customTimeRequest.trim())
+      return "Please describe your preferred time";
     if (fulfillmentType === "delivery" && !deliveryAddress)
       return "Please enter your delivery address";
     return null;
@@ -137,7 +148,7 @@ export default function OrderForm() {
       if (box.flavors.length < 1) return "Please select at least 1 flavor for each box";
       const maxFlavors = box.type === "party_box" ? 3 : 4;
       if (box.flavors.length > maxFlavors) {
-        const boxName = box.type === "party_box" ? "Party Box" : "Big Box";
+        const boxName = box.type === "party_box" ? "Party Box" : "4-Pack";
         return `${boxName} can have at most ${maxFlavors} flavors`;
       }
     }
@@ -198,10 +209,13 @@ export default function OrderForm() {
           price_cents: addonPrices[name] || 0,
         }));
 
-      const [hours, minutes] = orderWindowStart.split(":").map(Number);
-      const endMinutes = minutes + 30;
-      const endHours = endMinutes >= 60 ? hours + 1 : hours;
-      const windowEnd = `${endHours.toString().padStart(2, "0")}:${(endMinutes % 60).toString().padStart(2, "0")}`;
+      let windowEnd: string | undefined;
+      if (orderWindowStart !== "custom") {
+        const [hours, minutes] = orderWindowStart.split(":").map(Number);
+        const endMinutes = minutes + 30;
+        const endHours = endMinutes >= 60 ? hours + 1 : hours;
+        windowEnd = `${endHours.toString().padStart(2, "0")}:${(endMinutes % 60).toString().padStart(2, "0")}`;
+      }
 
       const orderData: CreateOrderRequest = {
         customer_name: customerName,
@@ -218,7 +232,12 @@ export default function OrderForm() {
         delivery_fee: fulfillmentType === "delivery" ? DELIVERY_FEE : 0,
         sms_opt_in: smsOptIn,
         email_opt_in: emailOptIn,
-        order_data: { items, addons: addonItems, serves_count: servesCount || undefined },
+        order_data: {
+          items,
+          addons: addonItems,
+          serves_count: servesCount || undefined,
+          custom_time_request: customTimeRequest.trim() || undefined,
+        },
       };
 
       const response = await fetch("/api/orders", {
@@ -251,11 +270,15 @@ export default function OrderForm() {
           weekday: "long", month: "long", day: "numeric",
         })
       : "";
+    const successTimeDisplay =
+      orderWindowStart === "custom"
+        ? customTimeRequest.trim() ? `Custom: ${customTimeRequest.trim()}` : "Custom time"
+        : to12h(orderWindowStart);
     const successParty = boxes.filter((b) => b.type === "party_box").length;
     const successBig = boxes.filter((b) => b.type === "big_box").length;
     const successBoxLine = [
       successParty > 0 ? `${successParty} Party Box${successParty > 1 ? "es" : ""}` : "",
-      successBig > 0 ? `${successBig} Big Box${successBig > 1 ? "es" : ""}` : "",
+      successBig > 0 ? `${successBig} 4-Pack${successBig > 1 ? "s" : ""}` : "",
     ].filter(Boolean).join(" + ");
     const successSubtotal = (calculateTotal() / 100).toFixed(2);
 
@@ -272,7 +295,7 @@ export default function OrderForm() {
           <div className="bg-gray-100 border-2 border-black p-4 mb-4 text-left space-y-1">
             <p className="text-sm font-bold text-black">ORDER ID: #{orderId}</p>
             <p className="text-xs text-black/70">
-              {fulfillmentType === "pickup" ? "Pickup" : "Delivery"} · {successDate} · {orderWindowStart}
+              {fulfillmentType === "pickup" ? "Pickup" : "Delivery"} · {successDate} · {successTimeDisplay}
             </p>
             {successBoxLine && (
               <p className="text-xs text-black/70">{successBoxLine}</p>
@@ -295,17 +318,22 @@ export default function OrderForm() {
   const partyBoxCount = boxes.filter((b) => b.type === "party_box").length;
   const bigBoxCount = boxes.filter((b) => b.type === "big_box").length;
 
+  const timeDisplay =
+    orderWindowStart === "custom"
+      ? customTimeRequest.trim() ? `Custom: ${customTimeRequest.trim()}` : "Custom time"
+      : to12h(orderWindowStart);
+
   const step1Summary = orderDate
     ? `${fulfillmentType === "pickup" ? "Pickup" : "Delivery"} · ${new Date(
         orderDate + "T00:00:00"
-      ).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${orderWindowStart}`
+      ).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${timeDisplay}`
     : null;
 
   const step2Summary =
     boxes.length > 0
       ? [
           partyBoxCount > 0 ? `${partyBoxCount} Party Box${partyBoxCount > 1 ? "es" : ""}` : "",
-          bigBoxCount > 0 ? `${bigBoxCount} Big Box${bigBoxCount > 1 ? "es" : ""}` : "",
+          bigBoxCount > 0 ? `${bigBoxCount} 4-Pack${bigBoxCount > 1 ? "s" : ""}` : "",
         ]
           .filter(Boolean)
           .join(" + ")
@@ -419,10 +447,10 @@ export default function OrderForm() {
               Place Your Order
             </h2>
             <p className="text-sm font-medium uppercase tracking-wide mb-2">
-              3 Easy Steps to Fresh Burekas
+              3 Easy Steps to Crunchy Burekas
             </p>
             <p className="text-xs font-medium text-gray-600">
-              72 hour advance notice • Confirmation within 24 hours
+              48 hour advance notice • Confirmation within 24 hours
             </p>
           </div>
 
@@ -495,9 +523,8 @@ export default function OrderForm() {
                     className="w-full px-4 py-2 border-2 border-black focus:border-[#E10600] focus:outline-none font-medium"
                   />
                   {orderDate && isMonOrTue(orderDate) && (
-                    <p className="text-sm text-[#E10600] mt-1 font-bold uppercase bg-yellow-50 border-2 border-[#E10600] p-2">
-                      ⚠️ We&apos;re normally closed Mondays & Tuesdays. We&apos;ll confirm if we can
-                      accommodate this date.
+                    <p className="text-sm text-[#E10600] mt-1 font-bold bg-yellow-50 border-2 border-[#E10600] p-2">
+                      ⚠️ We&apos;re normally closed Mondays &amp; Tuesdays. But don&apos;t let that stop you! Sometimes we can make it work ;)
                     </p>
                   )}
                 </div>
@@ -509,31 +536,49 @@ export default function OrderForm() {
                   </label>
                   <select
                     value={orderWindowStart}
-                    onChange={(e) => setOrderWindowStart(e.target.value)}
+                    onChange={(e) => {
+                      setOrderWindowStart(e.target.value);
+                      if (e.target.value !== "custom") setCustomTimeRequest("");
+                    }}
                     className="w-full px-4 py-2 border-2 border-black focus:border-[#E10600] focus:outline-none font-medium"
                   >
                     {TIME_SLOTS.map((time) => {
                       if (fulfillmentType === "pickup") {
                         return (
                           <option key={time} value={time}>
-                            {time}
+                            {to12h(time)}
                           </option>
                         );
                       } else {
-                        // Exclude 19:00 for delivery — window end would be 19:30, past closing
-                        if (time === "19:00") return null;
                         const [h, m] = time.split(":").map(Number);
                         const em = m + 30;
                         const eh = em >= 60 ? h + 1 : h;
                         const endTime = `${eh.toString().padStart(2, "0")}:${(em % 60).toString().padStart(2, "0")}`;
                         return (
                           <option key={time} value={time}>
-                            {time} – {endTime}
+                            {to12h(time)} – {to12h(endTime)}
                           </option>
                         );
                       }
                     })}
+                    <option value="custom">Other time — I&apos;ll specify below</option>
                   </select>
+
+                  {/* Custom time request input */}
+                  {orderWindowStart === "custom" && (
+                    <div className="mt-3">
+                      <input
+                        type="text"
+                        value={customTimeRequest}
+                        onChange={(e) => setCustomTimeRequest(e.target.value)}
+                        className="w-full px-4 py-2 border-2 border-black focus:border-[#E10600] focus:outline-none font-medium"
+                        placeholder="e.g. 6:00 PM, or as early as possible"
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                        Outside-hours requests aren&apos;t guaranteed — we&apos;ll confirm availability when we review your order.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Pickup address */}
@@ -556,7 +601,7 @@ export default function OrderForm() {
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
                         className="w-full px-4 py-2 border-2 border-black focus:border-[#E10600] focus:outline-none font-medium"
-                        placeholder="123 Main St, Brooklyn, NY 11201"
+                        placeholder="123 Main St, NYC, NY 10010"
                       />
                     </div>
                     <div className="mb-4">
@@ -667,7 +712,7 @@ export default function OrderForm() {
                       <span className="absolute top-2 right-2 text-xs bg-black px-2 py-1">
                         CLICK TO ADD
                       </span>
-                      <div className="text-xl mb-2">BIG BOX</div>
+                      <div className="text-xl mb-2">BUBA 4-Pack</div>
                       <div className="text-4xl">$78</div>
                       <div className="text-xs mt-2 opacity-90">Feeds 4–6</div>
                     </button>
@@ -689,7 +734,7 @@ export default function OrderForm() {
                       Select Flavors
                     </h3>
                     <p className="text-sm font-medium mb-6 text-gray-700">
-                      Party Box: 1–3 flavors • Big Box: 1–4 flavors
+                      Party Box: 1–3 flavors • 4-Pack: 1–4 flavors
                     </p>
                     <div className="space-y-4">
                       {boxes.map((box, index) => (
@@ -949,7 +994,7 @@ export default function OrderForm() {
       {/* Footer */}
       <footer className="bg-black text-white py-10 px-4 text-center">
         <div className="max-w-2xl mx-auto">
-          <p className="font-black text-xl uppercase tracking-tight mb-2">BUBA CATERING</p>
+          <p className="font-black text-xl uppercase tracking-tight mb-2">BUBA BUREKA CATERING</p>
           <p className="text-gray-300 text-sm">193 Bleecker St., New York, NY 10012</p>
           {businessHours && (
             <p className="text-gray-400 text-sm mt-1">{businessHours}</p>

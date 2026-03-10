@@ -19,10 +19,10 @@ export default function ProductShowcase() {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-5xl font-black uppercase tracking-tight text-black mb-4">
-            Choose Your Box
+            MENU
           </h2>
           <p className="text-sm font-medium uppercase tracking-wide">
-            All boxes include crushed tomato, tahini, spicy schug, pickles & olives
+            Get it with scratch-made crushed tomato, tahini, spicy schug, pickles & olives
           </p>
         </div>
 
@@ -38,7 +38,7 @@ export default function ProductShowcase() {
                 />
               ) : (
                 <div className="bg-gray-200 h-64 flex items-center justify-center">
-                  <p className="text-sm text-gray-500 font-medium">Photo coming soon</p>
+                  <p className="text-sm text-gray-500 font-medium">The photo&apos;s loading, we promise!</p>
                 </div>
               )}
             </div>
@@ -46,7 +46,7 @@ export default function ProductShowcase() {
             <div className="bg-[#E10600] text-white p-6 border-b-4 border-black">
               <div className="flex justify-between items-baseline mb-2">
                 <h3 className="text-3xl font-black uppercase tracking-tight">
-                  Party Box
+                  40-Piece Party Box
                 </h3>
                 <span className="text-5xl font-black">$225</span>
               </div>
@@ -76,12 +76,12 @@ export default function ProductShowcase() {
               {imageKeys.has("big-box") ? (
                 <img
                   src="/api/product-images/big-box"
-                  alt="BUBA Big Box - 8 half-size burekas"
+                  alt="BUBA 4-pack - 4 burekas, chopped in half, served with all the sides"
                   className="w-full h-64 object-cover"
                 />
               ) : (
                 <div className="bg-gray-200 h-64 flex items-center justify-center">
-                  <p className="text-sm text-gray-500 font-medium">Photo coming soon</p>
+                  <p className="text-sm text-gray-500 font-medium">The photo&apos;s loading. You&apos;re gonna love it!</p>
                 </div>
               )}
             </div>
@@ -89,7 +89,7 @@ export default function ProductShowcase() {
             <div className="bg-[#E10600] text-white p-6 border-b-4 border-black">
               <div className="flex justify-between items-baseline mb-2">
                 <h3 className="text-3xl font-black uppercase tracking-tight">
-                  Big Box
+                  4-Pack
                 </h3>
                 <span className="text-5xl font-black">$78</span>
               </div>
@@ -98,7 +98,7 @@ export default function ProductShowcase() {
             <div className="p-6 bg-white">
               <div className="space-y-2 mb-6 font-medium">
                 <p>Feeds 4-6 people</p>
-                <p>8 half-size burekas</p>
+                <p>4 burekas, chopped in half, served with all the sides</p>
                 <p>Choose 1-4 flavors</p>
               </div>
 

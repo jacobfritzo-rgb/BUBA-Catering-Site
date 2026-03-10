@@ -14,10 +14,10 @@ function validateOrderDate(orderDate: string): string | null {
   const date = new Date(year, month - 1, day); // midnight on fulfillment day
   const now = new Date(); // exact submission time
 
-  // Require at least 72 hours from the moment the order is placed
-  const minDate = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+  // Require at least 48 hours from the moment the order is placed
+  const minDate = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   if (date < minDate) {
-    return "Order date must be at least 72 hours from now";
+    return "Order date must be at least 48 hours from now";
   }
 
   // Note: We allow Mon/Tue orders as inquiries - operator will contact customer to confirm
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       const maxFlavors = item.type === "party_box" ? 3 : 4;
       if (item.flavors.length < 1 || item.flavors.length > maxFlavors) {
         return NextResponse.json(
-          { error: `${item.type === "party_box" ? "Party Box" : "Big Box"} must have 1-${maxFlavors} flavors selected` },
+          { error: `${item.type === "party_box" ? "Party Box" : "4-Pack"} must have 1-${maxFlavors} flavors selected` },
           { status: 400 }
         );
       }
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
 
       if (totalQuantity !== expectedPieces) {
         return NextResponse.json(
-          { error: `${item.type === "party_box" ? "Party Box" : "Big Box"} must have exactly ${expectedPieces} pieces total` },
+          { error: `${item.type === "party_box" ? "Party Box" : "4-Pack"} must have exactly ${expectedPieces} pieces total` },
           { status: 400 }
         );
       }
@@ -183,8 +183,13 @@ export async function POST(request: NextRequest) {
     const windowStart = body.fulfillment_type === "pickup" ? body.pickup_time! : body.delivery_window_start!;
     const productionDeadline = calculateProductionDeadline(orderDate);
     // Delivery: 90 min before MetroSpeedy pickup; Pickup: 45 min before customer arrival
+    // Fall back to noon when customer requested a custom (outside-hours) time
     const bakeOffsetMinutes = body.fulfillment_type === "delivery" ? 90 : 45;
-    const bakeDeadline = calculateBakeDeadline(orderDate, windowStart, bakeOffsetMinutes);
+    const bakeDeadline = calculateBakeDeadline(
+      orderDate,
+      windowStart && windowStart !== "custom" ? windowStart : "12:00",
+      bakeOffsetMinutes
+    );
 
     // Insert order
     const result = await db.execute({

@@ -6,28 +6,25 @@ export default function HeroSection() {
       <div className="max-w-4xl mx-auto px-4 py-20">
         <div className="text-center mb-12">
           <h1 className="text-7xl md:text-8xl font-black uppercase tracking-tight mb-6">
-            BUBA CATERING
+            BUBA BUREKA CATERING
           </h1>
           <p className="text-2xl md:text-3xl font-black uppercase tracking-tight mb-4">
-            Fresh Burekas for Your Event
+            Crispy, fresh-baked burekas for your next event
           </p>
           <p className="text-lg font-medium uppercase tracking-wide">
-            72 Hour Advance Notice • Pickup or Delivery • All NYC Boroughs
+            48 Hour Advance Notice Recommended • Pickup or Delivery • NYC
           </p>
         </div>
 
         <div className="grid grid-cols-3 gap-px bg-black mb-12">
-          <div className="bg-white text-black p-6 text-center">
-            <div className="text-4xl font-black mb-1">500+</div>
-            <div className="text-xs font-black uppercase tracking-wide">Events</div>
+          <div className="bg-white text-black p-6 text-center flex items-center justify-center min-h-[5rem]">
+            <p className="text-base font-black uppercase tracking-tight leading-tight">You can have it all!</p>
           </div>
-          <div className="bg-white text-black p-6 text-center">
-            <div className="text-4xl font-black mb-1">NYC</div>
-            <div className="text-xs font-black uppercase tracking-wide">All Boroughs</div>
+          <div className="bg-black text-white p-6 text-center flex items-center justify-center min-h-[5rem]">
+            <p className="text-3xl font-black uppercase tracking-tight">NYC #1</p>
           </div>
-          <div className="bg-white text-black p-6 text-center">
-            <div className="text-4xl font-black mb-1">2010</div>
-            <div className="text-xs font-black uppercase tracking-wide">Since</div>
+          <div className="bg-white text-black p-6 text-center flex items-center justify-center min-h-[5rem]">
+            <p className="text-base font-black uppercase tracking-tight leading-tight">Baked daily</p>
           </div>
         </div>
 
