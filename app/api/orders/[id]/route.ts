@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { OrderStatus, UpdateOrderRequest } from "@/lib/types";
 import { sendNotification, generateProductionSheetHTML } from "@/lib/email";
-import { requireAdmin } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/auth";
 
 function calculateProductionDeadline(orderDate: string): string {
   const [year, month, day] = orderDate.split('-').map(Number);

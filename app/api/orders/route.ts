@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { CreateOrderRequest, OrderStatus } from "@/lib/types";
-import { sendNewOrderNotification } from "@/lib/email";
-import { requireAdmin } from "@/lib/api-auth";
-
-// In-memory rate limiter: 5 submissions per IP per hour
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+import { sendNotification } from "@/lib/email";
+import { requireAdmin } from "@/lib/auth";
 
 // Helper to validate order date (pickup or delivery)
 function validateOrderDate(orderDate: string): string | null {
@@ -64,19 +61,6 @@ function calculateBakeDeadline(orderDate: string, windowStart: string, offsetMin
 }
 
 export async function POST(request: NextRequest) {
-  // Rate limiting
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-  if (record && now < record.resetAt) {
-    if (record.count >= 5) {
-      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
-    }
-    record.count++;
-  } else {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
-  }
-
   await initDb();
 
   try {
@@ -240,7 +224,7 @@ export async function POST(request: NextRequest) {
         order_data: JSON.parse(createdOrder.rows[0].order_data as string),
       };
       // Send notification email (don't await - let it happen in background)
-      sendNewOrderNotification(orderWithData as any).catch(err =>
+      sendNotification('new_order', orderWithData as any).catch(err =>
         console.error('Email notification failed:', err)
       );
     }

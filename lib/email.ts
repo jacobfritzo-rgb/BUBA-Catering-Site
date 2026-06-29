@@ -80,11 +80,9 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
 
   const deliveryFeeCents = order.delivery_fee || 0;
   const subtotalCents = order.total_price - deliveryFeeCents;
-  const subtotalFormatted = `$${(subtotalCents / 100).toFixed(2)}`;
-  const totalFormatted = `$${(order.total_price / 100).toFixed(2)}`;
-  const deliveryFeeDisplay = deliveryFeeCents > 0
-    ? `$${(deliveryFeeCents / 100).toFixed(2)}`
-    : 'TBD';
+  const subtotalFormatted = `$${formatPrice(subtotalCents)}`;
+  const totalFormatted = `$${formatPrice(order.total_price)}`;
+  const deliveryFeeDisplay = deliveryFeeCents > 0 ? `$${formatPrice(deliveryFeeCents)}` : 'TBD';
   const priceEstimateNote = order.fulfillment_type === 'delivery'
     ? deliveryFeeCents > 0
       ? '<p><em>Your delivery fee has been confirmed and is included in the total above.</em></p>'
@@ -120,7 +118,7 @@ function buildVariables(order: Order, productionSheetHTML?: string): Record<stri
     delivery_address_line: order.delivery_address
       ? `<p><strong>Address:</strong> ${order.delivery_address}</p>`
       : '',
-    total: `$${(order.total_price / 100).toFixed(2)}`,
+    total: `$${formatPrice(order.total_price)}`,
     subtotal: subtotalFormatted,
     delivery_fee_display: deliveryFeeDisplay,
     price_estimate_note: priceEstimateNote,
@@ -406,15 +404,6 @@ export function generateKitchenAlertHTML(orders: Order[], date: Date): string {
 
   html += `</div>`;
   return html;
-}
-
-// Convenience wrappers kept for backward compat / external callers
-export async function sendNewOrderNotification(order: Order) {
-  return sendNotification('new_order', order);
-}
-
-export async function sendOrderPaidNotification(order: Order, productionSheetHTML: string) {
-  return sendNotification('order_paid', order, productionSheetHTML);
 }
 
 export function generateProductionSheetHTML(orders: Order[]): string {

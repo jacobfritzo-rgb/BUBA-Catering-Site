@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
-import { requireAdmin } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   const authError = await requireAdmin(request);
