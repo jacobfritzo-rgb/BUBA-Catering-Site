@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Order, OrderStatus } from "@/lib/types";
-import { getFulfillmentDate, getFulfillmentTime, getFulfillmentTimeDisplay, parseLocalDate } from "@/lib/utils";
+import { getFulfillmentDate, getFulfillmentTime, getFulfillmentTimeDisplay, parseLocalDate, formatPrice } from "@/lib/utils";
 import OrderDetail from "./OrderDetail";
 
 interface OrderListProps {
@@ -153,7 +153,7 @@ export default function OrderList({ orders, onOrderUpdate }: OrderListProps) {
                       {order.order_data.items.length}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${(order.total_price / 100).toFixed(2)}
+                      ${formatPrice(order.total_price)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span

@@ -75,6 +75,17 @@ export function isMonOrTue(dateString: string): boolean {
   return dayOfWeek === 1 || dayOfWeek === 2;
 }
 
+// Time slots 8:30 AM – 4:30 PM in 30-min increments, shared by OrderForm and OrderDetail
+export const TIME_SLOTS: string[] = [];
+{
+  let h = 8, m = 30;
+  while (h < 16 || (h === 16 && m <= 30)) {
+    TIME_SLOTS.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
+    m += 30;
+    if (m >= 60) { m -= 60; h += 1; }
+  }
+}
+
 /**
  * Get minimum order date (48 hours from now, expressed as a local date string).
  * Uses local date parts to avoid UTC off-by-one when client is behind UTC.

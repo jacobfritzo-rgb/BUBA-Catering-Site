@@ -10,7 +10,7 @@ import ContactForm from "./ContactForm";
 import BoxConfigurator from "./BoxConfigurator";
 import AddonsSelector from "./AddonsSelector";
 import { Flavor, OrderItem, CreateOrderRequest } from "@/lib/types";
-import { isMonOrTue, getMinOrderDate } from "@/lib/utils";
+import { isMonOrTue, getMinOrderDate, formatPrice, TIME_SLOTS } from "@/lib/utils";
 
 interface Box {
   id: string;
@@ -18,14 +18,6 @@ interface Box {
   flavors: string[];
 }
 
-// Generate standard time slots: 8:30 AM – 4:30 PM in 30-min increments
-const TIME_SLOTS: string[] = [];
-let _slotHour = 8, _slotMin = 30;
-while (_slotHour < 16 || (_slotHour === 16 && _slotMin <= 30)) {
-  TIME_SLOTS.push(`${_slotHour.toString().padStart(2, "0")}:${_slotMin.toString().padStart(2, "0")}`);
-  _slotMin += 30;
-  if (_slotMin >= 60) { _slotMin -= 60; _slotHour += 1; }
-}
 
 function to12h(time24: string): string {
   const [h, m] = time24.split(":").map(Number);
@@ -280,7 +272,7 @@ export default function OrderForm() {
       successParty > 0 ? `${successParty} Party Box${successParty > 1 ? "es" : ""}` : "",
       successBig > 0 ? `${successBig} 4-Pack${successBig > 1 ? "s" : ""}` : "",
     ].filter(Boolean).join(" + ");
-    const successSubtotal = (calculateTotal() / 100).toFixed(2);
+    const successSubtotal = formatPrice(calculateTotal());
 
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -313,7 +305,7 @@ export default function OrderForm() {
   // ─── Helpers for display ────────────────────────────────────────────────────
 
   const totalCents = calculateTotal();
-  const totalDollars = (totalCents / 100).toFixed(2);
+  const totalDollars = formatPrice(totalCents);
 
   const partyBoxCount = boxes.filter((b) => b.type === "party_box").length;
   const bigBoxCount = boxes.filter((b) => b.type === "big_box").length;

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Order } from "@/lib/types";
-import { getFulfillmentDate, getFulfillmentTimeDisplay } from "@/lib/utils";
+import { getFulfillmentDate, getFulfillmentTimeDisplay, formatPrice } from "@/lib/utils";
 
 interface CalendarViewProps {
   orders: Order[];
@@ -211,7 +211,7 @@ export default function CalendarView({ orders }: CalendarViewProps) {
             </h3>
             {selectedDayRevenue > 0 && (
               <span className="text-sm font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
-                ${(selectedDayRevenue / 100).toFixed(2)} confirmed
+                ${formatPrice(selectedDayRevenue)} confirmed
               </span>
             )}
           </div>
@@ -276,7 +276,7 @@ export default function CalendarView({ orders }: CalendarViewProps) {
 
                       {/* Price */}
                       <div className="text-sm font-bold text-gray-900 flex-shrink-0">
-                        ${(order.total_price / 100).toFixed(2)}
+                        ${formatPrice(order.total_price)}
                       </div>
                     </div>
                   );

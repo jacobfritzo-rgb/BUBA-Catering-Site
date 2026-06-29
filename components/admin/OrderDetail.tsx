@@ -2,16 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Order, OrderNote, OrderItem } from "@/lib/types";
-import { getMinOrderDate } from "@/lib/utils";
+import { getMinOrderDate, formatPrice, TIME_SLOTS } from "@/lib/utils";
 
-// Generate time slots 8:30 AM – 4:30 PM in 30-min increments (same as OrderForm)
-const TIME_SLOTS: string[] = [];
-let _slotHour = 8, _slotMin = 30;
-while (_slotHour < 16 || (_slotHour === 16 && _slotMin <= 30)) {
-  TIME_SLOTS.push(`${_slotHour.toString().padStart(2, "0")}:${_slotMin.toString().padStart(2, "0")}`);
-  _slotMin += 30;
-  if (_slotMin >= 60) { _slotMin -= 60; _slotHour += 1; }
-}
 
 interface EditBox {
   id: string;
@@ -413,7 +405,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
 
     order.order_data.items.forEach((item) => {
       const boxType = item.type === "party_box" ? "Party Box" : "Big Box";
-      text += `${boxType} x${item.quantity} — $${(item.price_cents / 100).toFixed(2)}\n`;
+      text += `${boxType} x${item.quantity} — $${formatPrice(item.price_cents)}\n`;
       item.flavors.forEach((flavor) => {
         text += `  ${flavor.name}: ${flavor.quantity} pcs\n`;
       });
@@ -422,15 +414,15 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
 
     if (order.order_data.addons && order.order_data.addons.length > 0) {
       order.order_data.addons.forEach((addon) => {
-        text += `${addon.name} x${addon.quantity} — $${(addon.price_cents / 100).toFixed(2)}\n`;
+        text += `${addon.name} x${addon.quantity} — $${formatPrice(addon.price_cents)}\n`;
       });
       text += "\n";
     }
 
     if (order.fulfillment_type === "delivery") {
-      text += `Delivery Fee: $${(order.delivery_fee / 100).toFixed(2)}\n`;
+      text += `Delivery Fee: $${formatPrice(order.delivery_fee)}\n`;
     }
-    text += `Total: $${(order.total_price / 100).toFixed(2)}\n\n`;
+    text += `Total: $${formatPrice(order.total_price)}\n\n`;
 
     if (order.fulfillment_type === "delivery") {
       const windowStr = order.delivery_window_start === "custom"
@@ -709,7 +701,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
               {editAddons.map((addon, idx) => (
                 <div key={addon.name} className="flex items-center gap-3 mb-2">
                   <span className="text-sm text-gray-700 flex-1">
-                    {addon.name} (${(addon.price_cents / 100).toFixed(2)} each)
+                    {addon.name} (${formatPrice(addon.price_cents)} each)
                   </span>
                   <input
                     type="number"
@@ -817,7 +809,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
           <div key={index} className="mb-3 p-3 bg-white border border-gray-200 rounded">
             <p className="font-medium text-sm">
               {item.type === "party_box" ? "Party Box" : "Big Box"} x{item.quantity} — $
-              {(item.price_cents / 100).toFixed(2)}
+              {formatPrice(item.price_cents)}
             </p>
             <ul className="mt-1 ml-4 text-sm text-gray-600">
               {item.flavors.map((flavor, idx) => (
@@ -835,7 +827,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
             {order.order_data.addons.map((addon, index) => (
               <div key={index} className="mb-2 p-3 bg-white border border-gray-200 rounded">
                 <p className="font-medium text-sm">
-                  {addon.name} x{addon.quantity} — ${(addon.price_cents / 100).toFixed(2)}
+                  {addon.name} x{addon.quantity} — ${formatPrice(addon.price_cents)}
                 </p>
               </div>
             ))}
@@ -996,7 +988,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                   <div className="text-sm space-y-1 pb-2 border-b border-gray-100">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Order Subtotal:</span>
-                      <span className="font-bold">${(orderSubtotal / 100).toFixed(2)}</span>
+                      <span className="font-bold">${formatPrice(orderSubtotal)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Base Delivery Fee:</span>
@@ -1084,7 +1076,7 @@ export default function OrderDetail({ order, onUpdate }: OrderDetailProps) {
                   <div className="pt-2 border-t border-orange-200">
                     {order.delivery_fee > 0 && (
                       <p className="text-xs text-orange-700 mb-1.5">
-                        Current confirmed fee: <strong>${(order.delivery_fee / 100).toFixed(2)}</strong>
+                        Current confirmed fee: <strong>${formatPrice(order.delivery_fee)}</strong>
                       </p>
                     )}
                     <button

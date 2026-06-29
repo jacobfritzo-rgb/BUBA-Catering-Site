@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatPrice } from "@/lib/utils";
 
 interface MenuItem {
   id: number;
@@ -64,7 +65,7 @@ export default function AddonsSelector({ addons, onChange }: AddonsSelectorProps
                   <p className="text-xs text-black/70">{item.description}</p>
                 )}
                 <p className="text-sm font-bold text-black">
-                  ${(item.price_cents / 100).toFixed(2)}
+                  ${formatPrice(item.price_cents)}
                 </p>
               </div>
 

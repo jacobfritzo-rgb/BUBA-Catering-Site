@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Flavor } from "@/lib/types";
+import { formatPrice } from "@/lib/utils";
 
 interface MenuItem {
   id: number;
@@ -409,7 +410,7 @@ export default function MenuManager({ flavors, menuItems, onUpdate }: MenuManage
                               <div className="flex items-baseline gap-3">
                                 <h4 className="text-lg font-bold text-gray-900">{item.name}</h4>
                                 <span className="text-lg font-semibold text-green-600">
-                                  ${(item.price_cents / 100).toFixed(2)}
+                                  ${formatPrice(item.price_cents)}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-600 mt-1">
